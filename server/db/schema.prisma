@@ -1,0 +1,354 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model SubscriptionPlan {
+  id String @id @default(uuid())
+  name String
+  priceMontlyVnd Int
+  quotaStudents Int
+  quotaAiCredits Int
+  quotaClasses Int
+  quotaTeachers Int
+  features Json
+  organizations Organization[]
+}
+
+model Organization {
+  id String @id @default(uuid())
+  name String
+  slug String @unique
+  planId String?
+  plan SubscriptionPlan? @relation(fields: [planId], references: [id])
+  aiInstructionDefault String?
+  quotaStudents Int @default(30)
+  quotaAiCreditsMonthly Int @default(100)
+  aiCreditsUsedThisMonth Int @default(0)
+  quotaResetAt DateTime
+  status OrgStatus @default(TRIAL)
+  createdAt DateTime @default(now())
+  users User[]
+  classes Class[]
+  @@map("organizations")
+}
+enum OrgStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+}
+
+model User {
+  id String @id @default(uuid())
+  orgId String?
+  org Organization? @relation(fields: [orgId], references: [id])
+  email String @unique
+  passwordHash String
+  role UserRole
+  fullName String
+  dateOfBirth DateTime?
+  avatarUrl String?
+  notificationPrefs Json @default("{\"email\":true,\"inapp\":true,\"zalo\":false}")
+  zaloUserId String?
+  lastActiveAt DateTime?
+  status UserStatus @default(PENDING)
+  createdAt DateTime @default(now())
+  taughtClasses Class[] @relation("TeacherClasses")
+  memberships ClassMembership[]
+  submissions Submission[]
+  reviewedGrades Grade[] @relation("ReviewedGrades")
+  gradeRevisions GradeRevision[]
+  gradeAppeals GradeAppeal[]
+  notifications Notification[]
+  @@index([orgId])
+  @@index([role])
+  @@map("users")
+}
+enum UserRole {
+  SUPER_ADMIN
+  SCHOOL_ADMIN
+  TEACHER
+  STUDENT
+}
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
+model Class {
+  id String @id @default(uuid())
+  orgId String
+  org Organization @relation(fields: [orgId], references: [id])
+  teacherId String
+  teacher User @relation("TeacherClasses", fields: [teacherId], references: [id])
+  name String
+  subject String
+  gradeLevel String
+  joinCode String @unique @db.Char(6)
+  createdAt DateTime @default(now())
+  memberships ClassMembership[]
+  assignments Assignment[]
+  @@index([orgId])
+  @@index([teacherId])
+  @@map("classes")
+}
+
+model ClassMembership {
+  classId String
+  class Class @relation(fields: [classId], references: [id])
+  studentId String
+  student User @relation(fields: [studentId], references: [id])
+  joinedAt DateTime @default(now())
+  status MemberStatus @default(ACTIVE)
+  @@id([classId, studentId])
+  @@map("class_memberships")
+}
+enum MemberStatus {
+  ACTIVE
+  REMOVED
+}
+
+model Assignment {
+  id String @id @default(uuid())
+  classId String
+  class Class @relation(fields: [classId], references: [id])
+  title String
+  description String?
+  aiGradingInstruction String?
+  gradingStyle GradingStyle @default(THPT_QUOC_GIA)
+  timeLimitMinutes Int?
+  randomizeQuestions Boolean @default(false)
+  randomizeChoices Boolean @default(false)
+  antiCheatingEnabled Boolean @default(true)
+  allowOcrUpload Boolean @default(true)
+  showAnswerAfter ShowAnswerPolicy @default(NEVER)
+  availableFrom DateTime?
+  deadline DateTime?
+  status AssignmentStatus @default(DRAFT)
+  createdAt DateTime @default(now())
+  questions Question[]
+  submissions Submission[]
+  @@index([classId])
+  @@map("assignments")
+}
+enum GradingStyle {
+  THPT_QUOC_GIA
+  SANG_TAO
+  CO_BAN
+  TIEU_HOC
+  CAMBRIDGE
+  CUSTOM
+}
+enum ShowAnswerPolicy {
+  NEVER
+  AFTER_SUBMIT
+  AFTER_DEADLINE
+}
+enum AssignmentStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+model Question {
+  id String @id @default(uuid())
+  assignmentId String
+  assignment Assignment @relation(fields: [assignmentId], references: [id])
+  orderIndex Int
+  type QuestionType
+  content String
+  choices Json?
+  correctAnswer String?
+  sampleAnswer String?
+  maxScore Decimal @db.Decimal(5, 2)
+  createdAt DateTime @default(now())
+  rubricItems RubricItem[]
+  submissionAnswers SubmissionAnswer[]
+  gradeBreakdowns GradeBreakdown[]
+  gradeAppeals GradeAppeal[]
+  @@index([assignmentId])
+  @@map("questions")
+}
+enum QuestionType {
+  MULTIPLE_CHOICE
+  FILL_BLANK
+  SHORT_ESSAY
+  LONG_ESSAY
+  WRITING
+}
+
+model RubricItem {
+  id String @id @default(uuid())
+  questionId String
+  question Question @relation(fields: [questionId], references: [id])
+  orderIndex Int
+  description String
+  keywords String[]
+  score Decimal @db.Decimal(5, 2)
+  isRequired Boolean @default(true)
+  gradeBreakdowns GradeBreakdown[]
+  @@index([questionId])
+  @@map("rubric_items")
+}
+
+model Submission {
+  id String @id @default(uuid())
+  assignmentId String
+  assignment Assignment @relation(fields: [assignmentId], references: [id])
+  studentId String
+  student User @relation(fields: [studentId], references: [id])
+  startedAt DateTime @default(now())
+  submittedAt DateTime?
+  autoSubmitted Boolean @default(false)
+  antiCheatLog Json @default("[]")
+  gradingJobId String?
+  status SubmissionStatus @default(IN_PROGRESS)
+  answers SubmissionAnswer[]
+  grade Grade?
+  @@unique([assignmentId, studentId])
+  @@index([assignmentId])
+  @@index([studentId])
+  @@map("submissions")
+}
+enum SubmissionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  GRADING
+  GRADED
+  INVALIDATED
+}
+
+model SubmissionAnswer {
+  id String @id @default(uuid())
+  submissionId String
+  submission Submission @relation(fields: [submissionId], references: [id])
+  questionId String
+  question Question @relation(fields: [questionId], references: [id])
+  answerText String?
+  answerFileUrl String?
+  ocrRawText String?
+  ocrConfirmed Boolean @default(false)
+  savedAt DateTime @default(now())
+  @@index([submissionId])
+  @@map("submission_answers")
+}
+
+model Grade {
+  id String @id @default(uuid())
+  submissionId String @unique
+  submission Submission @relation(fields: [submissionId], references: [id])
+  totalScore Decimal? @db.Decimal(5, 2)
+  maxScore Decimal @db.Decimal(5, 2)
+  aiTotalScore Decimal? @db.Decimal(5, 2)
+  overallComment String?
+  aiOverallComment String?
+  reviewedById String?
+  reviewedBy User? @relation("ReviewedGrades", fields: [reviewedById], references: [id])
+  reviewedAt DateTime?
+  status GradeStatus @default(AI_DRAFT)
+  publishedAt DateTime?
+  breakdowns GradeBreakdown[]
+  revisions GradeRevision[]
+  appeals GradeAppeal[]
+  @@map("grades")
+}
+enum GradeStatus {
+  AI_DRAFT
+  PENDING_REVIEW
+  APPROVED
+  OVERRIDDEN
+}
+
+model GradeBreakdown {
+  id String @id @default(uuid())
+  gradeId String
+  grade Grade @relation(fields: [gradeId], references: [id])
+  questionId String
+  question Question @relation(fields: [questionId], references: [id])
+  rubricItemId String?
+  rubricItem RubricItem? @relation(fields: [rubricItemId], references: [id])
+  scoreAwarded Decimal @db.Decimal(5, 2)
+  aiScoreSuggested Decimal? @db.Decimal(5, 2)
+  confidenceLevel ConfidenceLevel?
+  aiReasoning String?
+  teacherComment String?
+  @@index([gradeId])
+  @@map("grade_breakdowns")
+}
+enum ConfidenceLevel {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+model GradeRevision {
+  id String @id @default(uuid())
+  gradeId String
+  grade Grade @relation(fields: [gradeId], references: [id])
+  changedById String
+  changedBy User @relation(fields: [changedById], references: [id])
+  changedAt DateTime @default(now())
+  oldScore Decimal? @db.Decimal(5, 2)
+  newScore Decimal? @db.Decimal(5, 2)
+  reason String
+  @@index([gradeId])
+  @@map("grade_revisions")
+}
+
+model GradeAppeal {
+  id String @id @default(uuid())
+  gradeId String
+  grade Grade @relation(fields: [gradeId], references: [id])
+  studentId String
+  student User @relation(fields: [studentId], references: [id])
+  questionId String?
+  question Question? @relation(fields: [questionId], references: [id])
+  reason String
+  status AppealStatus @default(PENDING)
+  teacherResponse String?
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+  @@unique([gradeId, questionId])
+  @@map("grade_appeals")
+}
+enum AppealStatus {
+  PENDING
+  REVIEWING
+  RESOLVED_APPROVED
+  RESOLVED_REJECTED
+}
+
+model Notification {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id])
+  type NotificationType
+  title String
+  body String
+  relatedEntityType String?
+  relatedEntityId String?
+  isRead Boolean @default(false)
+  sentChannels Json @default("{}")
+  createdAt DateTime @default(now())
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+enum NotificationType {
+  ASSIGNMENT_PUBLISHED
+  DEADLINE_REMINDER
+  SUBMISSION_RECEIVED
+  GRADING_COMPLETE
+  GRADE_PUBLISHED
+  GRADE_UPDATED
+  REVIEW_REQUIRED
+  APPEAL_RECEIVED
+  APPEAL_RESOLVED
+  QUOTA_WARNING
+  AI_GRADING_FAILED
+}
