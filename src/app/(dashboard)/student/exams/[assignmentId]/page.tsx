@@ -26,7 +26,17 @@ export default function ExamRoomPage() {
 
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  // 1. Anti-Cheat Event Listeners (Tab switch, Blur, Fullscreen Exit)
+  const logViolationMutation = trpc.submission.logViolation.useMutation();
+  const startExamMutation = trpc.submission.startExam.useMutation();
+
+  // 1. Khởi tạo Submission ngay khi vào phòng thi để Giáo viên giám sát
+  useEffect(() => {
+    if (assignmentId) {
+      startExamMutation.mutate({ assignmentId });
+    }
+  }, [assignmentId]);
+
+  // 2. Anti-Cheat Event Listeners (Tab switch, Blur, Fullscreen Exit)
   useEffect(() => {
     if (!assignment?.antiCheatingEnabled) return;
 
@@ -41,6 +51,20 @@ export default function ExamRoomPage() {
         setLastWarningText(`⚠️ CẢNH BÁO GIAN LẬN: ${reason} (Lần thứ ${nextCount})`);
         setShowWarningToast(true);
         setTimeout(() => setShowWarningToast(false), 5000);
+
+        // Ping lên Server cho Giáo viên Live Monitor thấy
+        logViolationMutation.mutate({
+          assignmentId,
+          event: eventType,
+          reason: reason
+        });
+
+        // Tự động thu bài nếu quá 5 lần (Option)
+        if (nextCount >= 5) {
+          alert("Hệ thống tự động thu bài do bạn vi phạm quá nhiều lần!");
+          handleSubmit(true); // pass true flag to indicate forced
+        }
+
         return nextCount;
       });
     };
@@ -72,7 +96,7 @@ export default function ExamRoomPage() {
       window.removeEventListener("blur", handleWindowBlur);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
-  }, [assignment?.antiCheatingEnabled]);
+  }, [assignment?.antiCheatingEnabled, assignmentId]);
 
   const requestFullscreen = () => {
     if (document.documentElement.requestFullscreen) {
@@ -80,7 +104,7 @@ export default function ExamRoomPage() {
     }
   };
 
-  // 2. OCR Image Upload Handler
+  // 3. OCR Image Upload Handler
   const handleImageUpload = async (questionId: string, file?: File) => {
     if (!file) return;
 
@@ -128,8 +152,8 @@ export default function ExamRoomPage() {
     onError: (err) => alert(err.message)
   });
 
-  const handleSubmit = () => {
-    if (confirm("Bạn có chắc chắn muốn nộp bài? Hệ thống sẽ chuyển bài cho AI chấm điểm.")) {
+  const handleSubmit = (force = false) => {
+    if (force || confirm("Bạn có chắc chắn muốn nộp bài? Hệ thống sẽ chuyển bài cho AI chấm điểm.")) {
       submitMutation.mutate({
         assignmentId,
         answers: assignment?.questions.map(q => ({

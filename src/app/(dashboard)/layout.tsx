@@ -35,12 +35,27 @@ export default async function DashboardLayout({
         <nav className="flex-1 px-4 space-y-2 mt-4">
           <Link href={`/${role === "TEACHER" ? "teacher" : "student"}`} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-brand-accent/20 text-brand-accent font-medium border border-brand-accent/30 transition-colors">
             <LayoutDashboard className="w-5 h-5" />
-            Bảng điều khiển
+            Tổng quan (Dashboard)
           </Link>
-          <Link href={`/${role === "TEACHER" ? "teacher/classes" : "student/exams"}`} className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
-            <BookOpen className="w-5 h-5" />
-            {role === "TEACHER" ? "Lớp học" : "Bài thi"}
-          </Link>
+          
+          {role === "TEACHER" ? (
+            <>
+              <Link href="/teacher/classes" className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+                <BookOpen className="w-5 h-5" /> Quản lý Lớp học
+              </Link>
+              <Link href="/teacher/live-monitor" className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+                <span className="relative flex h-3 w-3 mr-1">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                </span>
+                Giám sát Phòng thi
+              </Link>
+            </>
+          ) : (
+            <Link href="/student/grades" className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+              <BookOpen className="w-5 h-5" /> Bảng điểm (Gradebook)
+            </Link>
+          )}
         </nav>
 
         <div className="p-4 border-t border-white/5">

@@ -100,9 +100,9 @@ model Class {
 
 model ClassMembership {
   classId String
-  class Class @relation(fields: [classId], references: [id])
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
   studentId String
-  student User @relation(fields: [studentId], references: [id])
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
   joinedAt DateTime @default(now())
   status MemberStatus @default(ACTIVE)
   @@id([classId, studentId])
@@ -116,7 +116,7 @@ enum MemberStatus {
 model Assignment {
   id String @id @default(uuid())
   classId String
-  class Class @relation(fields: [classId], references: [id])
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
   title String
   description String?
   aiGradingInstruction String?
@@ -159,7 +159,7 @@ enum AssignmentStatus {
 model Question {
   id String @id @default(uuid())
   assignmentId String
-  assignment Assignment @relation(fields: [assignmentId], references: [id])
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   orderIndex Int
   type QuestionType
   content String
@@ -186,7 +186,7 @@ enum QuestionType {
 model RubricItem {
   id String @id @default(uuid())
   questionId String
-  question Question @relation(fields: [questionId], references: [id])
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
   orderIndex Int
   description String
   keywords String[]
@@ -200,9 +200,9 @@ model RubricItem {
 model Submission {
   id String @id @default(uuid())
   assignmentId String
-  assignment Assignment @relation(fields: [assignmentId], references: [id])
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   studentId String
-  student User @relation(fields: [studentId], references: [id])
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
   startedAt DateTime @default(now())
   submittedAt DateTime?
   autoSubmitted Boolean @default(false)
@@ -227,9 +227,9 @@ enum SubmissionStatus {
 model SubmissionAnswer {
   id String @id @default(uuid())
   submissionId String
-  submission Submission @relation(fields: [submissionId], references: [id])
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   questionId String
-  question Question @relation(fields: [questionId], references: [id])
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
   answerText String?
   answerFileUrl String?
   ocrRawText String?
@@ -242,7 +242,7 @@ model SubmissionAnswer {
 model Grade {
   id String @id @default(uuid())
   submissionId String @unique
-  submission Submission @relation(fields: [submissionId], references: [id])
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   totalScore Decimal? @db.Decimal(5, 2)
   maxScore Decimal @db.Decimal(5, 2)
   aiTotalScore Decimal? @db.Decimal(5, 2)
@@ -268,11 +268,11 @@ enum GradeStatus {
 model GradeBreakdown {
   id String @id @default(uuid())
   gradeId String
-  grade Grade @relation(fields: [gradeId], references: [id])
+  grade Grade @relation(fields: [gradeId], references: [id], onDelete: Cascade)
   questionId String
-  question Question @relation(fields: [questionId], references: [id])
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
   rubricItemId String?
-  rubricItem RubricItem? @relation(fields: [rubricItemId], references: [id])
+  rubricItem RubricItem? @relation(fields: [rubricItemId], references: [id], onDelete: Cascade)
   scoreAwarded Decimal @db.Decimal(5, 2)
   aiScoreSuggested Decimal? @db.Decimal(5, 2)
   confidenceLevel ConfidenceLevel?
@@ -290,7 +290,7 @@ enum ConfidenceLevel {
 model GradeRevision {
   id String @id @default(uuid())
   gradeId String
-  grade Grade @relation(fields: [gradeId], references: [id])
+  grade Grade @relation(fields: [gradeId], references: [id], onDelete: Cascade)
   changedById String
   changedBy User @relation(fields: [changedById], references: [id])
   changedAt DateTime @default(now())
@@ -304,11 +304,11 @@ model GradeRevision {
 model GradeAppeal {
   id String @id @default(uuid())
   gradeId String
-  grade Grade @relation(fields: [gradeId], references: [id])
+  grade Grade @relation(fields: [gradeId], references: [id], onDelete: Cascade)
   studentId String
-  student User @relation(fields: [studentId], references: [id])
+  student User @relation(fields: [studentId], references: [id], onDelete: Cascade)
   questionId String?
-  question Question? @relation(fields: [questionId], references: [id])
+  question Question? @relation(fields: [questionId], references: [id], onDelete: Cascade)
   reason String
   status AppealStatus @default(PENDING)
   teacherResponse String?

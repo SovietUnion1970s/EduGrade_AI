@@ -117,9 +117,34 @@ export const assignmentRouter = router({
       });
       if (!assignment) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy đề thi hoặc không có quyền.' });
 
-      return await prisma.assignment.update({
+      const published = await prisma.assignment.update({
         where: { id: input.id },
         data: { status: 'PUBLISHED', availableFrom: new Date() }
       });
+
+      // Bắn thông báo cho học sinh trong lớp (Tính năng 5: Real-time notification cho học sinh)
+      try {
+        const memberships = await prisma.classMembership.findMany({
+          where: { classId: assignment.classId, status: 'ACTIVE' },
+          select: { studentId: true }
+        });
+
+        if (memberships.length > 0) {
+          await prisma.notification.createMany({
+            data: memberships.map(m => ({
+              userId: m.studentId,
+              type: 'ASSIGNMENT_PUBLISHED',
+              title: `📝 Bài thi mới: ${assignment.title}`,
+              body: `Giáo viên vừa giao bài thi mới cho lớp. Hãy vào làm bài ngay!`,
+              relatedEntityType: 'ASSIGNMENT',
+              relatedEntityId: assignment.id
+            }))
+          });
+        }
+      } catch (err) {
+        console.error('Failed to notify students about published assignment', err);
+      }
+
+      return published;
     })
 });

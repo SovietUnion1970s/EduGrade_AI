@@ -85,7 +85,13 @@ export const gradeRouter = router({
   publish: teacherProcedure
     .input(z.object({ gradeId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      return await prisma.grade.update({
+      const grade = await prisma.grade.findUnique({ 
+        where: { id: input.gradeId },
+        include: { submission: { include: { assignment: true } } }
+      });
+      if (!grade) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const published = await prisma.grade.update({
         where: { id: input.gradeId },
         data: {
           status: 'APPROVED',
@@ -94,6 +100,23 @@ export const gradeRouter = router({
           reviewedAt: new Date()
         }
       });
+
+      try {
+        await prisma.notification.create({
+          data: {
+            userId: grade.submission.studentId,
+            type: 'GRADE_PUBLISHED',
+            title: `🏆 Đã có điểm bài thi: ${grade.submission.assignment.title}`,
+            body: `Giáo viên đã công bố kết quả chấm thi. Tổng điểm của bạn: ${Number(grade.totalScore || grade.aiTotalScore || 0).toFixed(1)} điểm.`,
+            relatedEntityType: 'GRADE',
+            relatedEntityId: grade.id
+          }
+        });
+      } catch (err) {
+        console.error('Failed to notify student about published grade', err);
+      }
+
+      return published;
     }),
 
   createAppeal: protectedProcedure
@@ -105,7 +128,11 @@ export const gradeRouter = router({
     .mutation(async ({ ctx, input }) => {
       const grade = await prisma.grade.findUnique({
         where: { id: input.gradeId },
-        include: { submission: true }
+        include: { 
+          submission: { 
+            include: { assignment: { include: { class: true } }, student: true } 
+          } 
+        }
       });
       if (!grade) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy điểm số.' });
 
@@ -118,7 +145,7 @@ export const gradeRouter = router({
       });
       if (existing) throw new TRPCError({ code: 'CONFLICT', message: 'Bạn đã gửi đơn phúc khảo cho mục này rồi.' });
 
-      return await prisma.gradeAppeal.create({
+      const appeal = await prisma.gradeAppeal.create({
         data: {
           gradeId: input.gradeId,
           studentId: ctx.session.user.id!,
@@ -127,6 +154,23 @@ export const gradeRouter = router({
           status: 'PENDING'
         }
       });
+
+      try {
+        await prisma.notification.create({
+          data: {
+            userId: grade.submission.assignment.class.teacherId,
+            type: 'APPEAL_RECEIVED',
+            title: `🔔 Đơn phúc khảo mới từ ${grade.submission.student.fullName}`,
+            body: `Học sinh ${grade.submission.student.fullName} đã gửi đơn phúc khảo cho bài thi ${grade.submission.assignment.title}.`,
+            relatedEntityType: 'GRADE',
+            relatedEntityId: grade.id
+          }
+        });
+      } catch (err) {
+        console.error('Failed to notify teacher about appeal', err);
+      }
+
+      return appeal;
     }),
 
   getAppeals: protectedProcedure
@@ -149,13 +193,31 @@ export const gradeRouter = router({
       teacherResponse: z.string().min(5, 'Vui lòng nhập phản hồi cho học sinh.')
     }))
     .mutation(async ({ ctx, input }) => {
-      return await prisma.gradeAppeal.update({
+      const appeal = await prisma.gradeAppeal.update({
         where: { id: input.appealId },
         data: {
           status: input.status,
           teacherResponse: input.teacherResponse,
           resolvedAt: new Date()
-        }
+        },
+        include: { grade: { include: { submission: { include: { assignment: true } } } } }
       });
+
+      try {
+        await prisma.notification.create({
+          data: {
+            userId: appeal.studentId,
+            type: 'APPEAL_RESOLVED',
+            title: `🔔 Kết quả phúc khảo bài thi ${appeal.grade.submission.assignment.title}`,
+            body: `Giáo viên đã ${input.status === 'RESOLVED_APPROVED' ? 'chấp nhận' : 'từ chối'} đơn phúc khảo của bạn.`,
+            relatedEntityType: 'GRADE',
+            relatedEntityId: appeal.gradeId
+          }
+        });
+      } catch (err) {
+        console.error('Failed to notify student about appeal resolution', err);
+      }
+
+      return appeal;
     })
 });

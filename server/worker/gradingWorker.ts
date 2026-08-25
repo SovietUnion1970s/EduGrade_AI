@@ -38,6 +38,7 @@ export const gradingWorker = new Worker(GRADING_QUEUE_NAME, async (job) => {
     if (answer.answerText) {
       const instruction = submission.assignment.aiGradingInstruction || 'Hãy chấm công bằng.';
       const aiResult = await aiService.gradeAnswer(
+        answer.questionId,
         answer.question.content,
         answer.answerText,
         answer.question.rubricItems,

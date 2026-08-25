@@ -230,9 +230,7 @@ export const classRouter = router({
 
       if (!classObj) throw new TRPCError({ code: 'FORBIDDEN', message: 'Bạn không có quyền xóa lớp này.' });
 
-      // Delete memberships and assignments first if cascading isn't automatic
-      await prisma.classMembership.deleteMany({ where: { classId: input.id } });
-      await prisma.assignment.deleteMany({ where: { classId: input.id } });
+      // With onDelete: Cascade on the schema, deleting the class will automatically delete related records
       await prisma.class.delete({ where: { id: input.id } });
 
       return { success: true, message: 'Đã xóa lớp học.' };

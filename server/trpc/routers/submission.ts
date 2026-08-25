@@ -57,6 +57,7 @@ export const submissionRouter = router({
       const submission = await prisma.submission.findUnique({
         where: { id: input.id },
         include: {
+          student: { select: { fullName: true, email: true } },
           assignment: { select: { title: true, class: { select: { name: true } } } },
           answers: { include: { question: true }, orderBy: { question: { orderIndex: 'asc' } } },
           grade: { include: { breakdowns: { include: { rubricItem: true } } } }
@@ -118,5 +119,97 @@ export const submissionRouter = router({
           riskLevel
         };
       });
+    }),
+
+  getMyGrades: protectedProcedure
+    .query(async ({ ctx }) => {
+      const submissions = await prisma.submission.findMany({
+        where: { studentId: ctx.session.user.id },
+        include: {
+          assignment: {
+            include: {
+              class: { select: { name: true, subject: true } }
+            }
+          },
+          grade: {
+            select: { totalScore: true, status: true, publishedAt: true }
+          }
+        },
+        orderBy: { submittedAt: 'desc' }
+      });
+      return submissions;
+    }),
+
+  startExam: protectedProcedure
+    .input(z.object({ assignmentId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await prisma.submission.findUnique({
+        where: { assignmentId_studentId: { assignmentId: input.assignmentId, studentId: ctx.session.user.id } }
+      });
+      if (existing) return existing;
+      
+      return await prisma.submission.create({
+        data: {
+          assignmentId: input.assignmentId,
+          studentId: ctx.session.user.id,
+          status: 'IN_PROGRESS',
+          startedAt: new Date()
+        }
+      });
+    }),
+
+  logViolation: protectedProcedure
+    .input(z.object({
+      assignmentId: z.string().uuid(),
+      event: z.string(),
+      reason: z.string()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const sub = await prisma.submission.findUnique({
+        where: { assignmentId_studentId: { assignmentId: input.assignmentId, studentId: ctx.session.user.id } }
+      });
+      if (!sub) return null;
+
+      const currentLogs = (sub.antiCheatLog as any[]) || [];
+      const newLog = { event: input.event, timestamp: new Date().toISOString(), reason: input.reason, count: currentLogs.length + 1 };
+      
+      return await prisma.submission.update({
+        where: { id: sub.id },
+        data: { antiCheatLog: [...currentLogs, newLog] }
+      });
+    }),
+
+  getActiveExams: teacherProcedure
+    .query(async ({ ctx }) => {
+      // Find all in-progress submissions for classes owned by this teacher
+      return await prisma.submission.findMany({
+        where: {
+          assignment: { class: { teacherId: ctx.session.user.id } },
+          status: 'IN_PROGRESS'
+        },
+        include: {
+          student: { select: { fullName: true, email: true } },
+          assignment: { select: { title: true, class: { select: { name: true } } } }
+        },
+        orderBy: { startedAt: 'desc' }
+      });
+    }),
+
+  forceSubmit: teacherProcedure
+    .input(z.object({ submissionId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const sub = await prisma.submission.findUnique({
+        where: { id: input.submissionId },
+        include: { assignment: { include: { class: true } } }
+      });
+      if (!sub || sub.assignment.class.teacherId !== ctx.session.user.id) throw new TRPCError({ code: 'FORBIDDEN' });
+
+      const updated = await prisma.submission.update({
+        where: { id: input.submissionId },
+        data: { status: 'GRADING', submittedAt: new Date(), autoSubmitted: true }
+      });
+      
+      await gradingQueue.add('grade-submission', { submissionId: updated.id });
+      return { success: true };
     })
 });

@@ -65,10 +65,10 @@ graph TD
     *   Học sinh gửi yêu cầu phúc khảo kèm lý do tối thiểu 20 ký tự trực tiếp tại trang kết quả bài thi.
     *   Giáo viên nhận thông báo, xem đơn phúc khảo ngay tại giao diện chấm bài và phản hồi Chấp nhận/Từ chối.
 
-### 🎯 Giai đoạn 5: Tối ưu Chi phí AI & Hiệu năng Hệ thống (Gemini Context Caching)
+### 🎯 Giai đoạn 5: Tối ưu Chi phí AI & Hiệu năng Hệ thống (Gemini Context Caching & Smart Routing) (Đã hoàn thành)
 *   **Gemini Context Caching (Tiết kiệm tới 84% chi phí API):**
-    *   Cache nội dung đề thi & barem chấm điểm trên hệ thống của Google (tồn tại 30 phút).
-    *   Khi chấm hàng trăm bài thi của cùng một lớp, hệ thống không cần gửi lại đề thi & barem trong mỗi lượt gọi API, giảm chi phí Token đáng kể.
+    *   Cache nội dung đề thi & barem chấm điểm trên hệ thống của Google với `GoogleAICacheManager` (tồn tại 30 phút).
+    *   Khi chấm hàng trăm bài thi của cùng một lớp, hệ thống tự động tái sử dụng bộ đệm Context đã cache, không cần gửi lại đề thi & barem trong mỗi lượt gọi API.
 *   **Điều phối Mô hình (Smart Model Routing):**
     *   Bài làm trống / Nộp trắng $\rightarrow$ Hệ thống tự chấm 0 điểm ngay lập tức (không tốn chi phí gọi AI).
     *   Bài tự luận ngắn $\rightarrow$ Định tuyến sang `gemini-1.5-flash` để phản hồi nhanh.
