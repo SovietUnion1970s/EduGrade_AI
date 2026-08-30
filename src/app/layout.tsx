@@ -3,6 +3,7 @@ import { Outfit } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { TRPCProvider } from "@/components/providers/trpc-provider";
+import { Toaster } from "sonner";
 
 const outfit = Outfit({
   subsets: ["latin", "latin-ext"],
@@ -27,6 +28,7 @@ export default function RootLayout({
         <SessionProvider>
           <TRPCProvider>
             {children}
+            <Toaster theme="dark" position="top-right" richColors />
           </TRPCProvider>
         </SessionProvider>
       </body>

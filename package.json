@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "start:prod": "node wait-services.js && npx prisma db push && next start",
+    "prisma:studio": "npx prisma studio",
     "lint": "next lint"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "prisma": "^5.22.0",
     "react": "^18",
     "react-dom": "^18",
+    "sonner": "^2.0.8",
     "superjson": "^2.2.6",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.4.3"

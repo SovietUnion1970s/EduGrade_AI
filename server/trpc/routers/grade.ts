@@ -109,7 +109,8 @@ export const gradeRouter = router({
             title: `🏆 Đã có điểm bài thi: ${grade.submission.assignment.title}`,
             body: `Giáo viên đã công bố kết quả chấm thi. Tổng điểm của bạn: ${Number(grade.totalScore || grade.aiTotalScore || 0).toFixed(1)} điểm.`,
             relatedEntityType: 'GRADE',
-            relatedEntityId: grade.id
+            relatedEntityId: grade.id,
+            actionUrl: `/student/submissions/${grade.submission.id}`
           }
         });
       } catch (err) {
@@ -163,7 +164,8 @@ export const gradeRouter = router({
             title: `🔔 Đơn phúc khảo mới từ ${grade.submission.student.fullName}`,
             body: `Học sinh ${grade.submission.student.fullName} đã gửi đơn phúc khảo cho bài thi ${grade.submission.assignment.title}.`,
             relatedEntityType: 'GRADE',
-            relatedEntityId: grade.id
+            relatedEntityId: grade.id,
+            actionUrl: `/teacher/submissions/${grade.submission.id}`
           }
         });
       } catch (err) {
@@ -211,7 +213,8 @@ export const gradeRouter = router({
             title: `🔔 Kết quả phúc khảo bài thi ${appeal.grade.submission.assignment.title}`,
             body: `Giáo viên đã ${input.status === 'RESOLVED_APPROVED' ? 'chấp nhận' : 'từ chối'} đơn phúc khảo của bạn.`,
             relatedEntityType: 'GRADE',
-            relatedEntityId: appeal.gradeId
+            relatedEntityId: appeal.gradeId,
+            actionUrl: `/student/submissions/${appeal.grade.submission.id}`
           }
         });
       } catch (err) {

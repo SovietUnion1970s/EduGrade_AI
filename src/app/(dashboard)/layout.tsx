@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { LayoutDashboard, BookOpen } from "lucide-react";
 import { SignOutButton } from "@/components/shared/sign-out-button";
+import { NotificationBell } from "@/components/shared/notification-bell";
 
 export default async function DashboardLayout({
   children,
@@ -16,6 +17,18 @@ export default async function DashboardLayout({
   }
 
   const role = (session.user as any).role;
+  
+  let hasActiveExams = false;
+  if (role === "TEACHER") {
+    const { prisma } = await import("@/lib/db");
+    const activeSubmissionsCount = await prisma.submission.count({
+      where: {
+        assignment: { class: { teacherId: session.user.id } },
+        status: 'IN_PROGRESS'
+      }
+    });
+    hasActiveExams = activeSubmissionsCount > 0;
+  }
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-brand-bg">
@@ -25,10 +38,11 @@ export default async function DashboardLayout({
           <Link href="/dashboard" className="text-2xl font-extrabold tracking-tight">
             EduGrade<span className="text-brand-accent">AI</span>
           </Link>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-xs px-2 py-1 bg-white/10 rounded-full font-medium">
+          <div className="mt-4 flex items-center justify-between">
+            <span className="text-xs px-3 py-1.5 bg-white/10 rounded-full font-medium">
               {role === "TEACHER" ? "Giáo viên" : "Học sinh"}
             </span>
+            <NotificationBell />
           </div>
         </div>
         
@@ -43,13 +57,15 @@ export default async function DashboardLayout({
               <Link href="/teacher/classes" className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
                 <BookOpen className="w-5 h-5" /> Quản lý Lớp học
               </Link>
-              <Link href="/teacher/live-monitor" className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
-                <span className="relative flex h-3 w-3 mr-1">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                </span>
-                Giám sát Phòng thi
-              </Link>
+              {hasActiveExams && (
+                <Link href="/teacher/live-monitor" className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors">
+                  <span className="relative flex h-3 w-3 mr-1">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                  </span>
+                  Giám sát Phòng thi
+                </Link>
+              )}
             </>
           ) : (
             <Link href="/student/grades" className="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors">

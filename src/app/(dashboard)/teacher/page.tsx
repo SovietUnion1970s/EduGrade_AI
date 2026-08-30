@@ -4,6 +4,7 @@ import { trpc } from "@/lib/trpc";
 import { Copy, Plus, Users, BookOpen, BrainCircuit, X, Loader2, Bell, Trash2, UserMinus, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 export default function TeacherDashboard() {
   const { data: classes, isLoading: isClassesLoading } = trpc.class.getAll.useQuery(undefined, { refetchInterval: 3000 });
@@ -27,18 +28,18 @@ export default function TeacherDashboard() {
       utils.class.getStats.invalidate();
       setIsCreateModalOpen(false);
       setNewClassData({ name: "", subject: "", gradeLevel: "10" });
-      alert("Tạo lớp thành công!");
+      toast.success("Tạo lớp thành công!");
     },
-    onError: (err) => alert("Lỗi: " + err.message)
+    onError: (err) => toast.error("Lỗi: " + err.message)
   });
 
   const deleteClassMutation = trpc.class.deleteClass.useMutation({
     onSuccess: () => {
       utils.class.getAll.invalidate();
       utils.class.getStats.invalidate();
-      alert("Đã xóa lớp thành công!");
+      toast.success("Đã xóa lớp thành công!");
     },
-    onError: (err) => alert("Lỗi: " + err.message)
+    onError: (err) => toast.error("Lỗi: " + err.message)
   });
 
   const removeStudentMutation = trpc.class.removeStudent.useMutation({
@@ -46,9 +47,9 @@ export default function TeacherDashboard() {
       utils.class.getAll.invalidate();
       utils.class.getStats.invalidate();
       if (viewingClassId) utils.class.getById.invalidate({ id: viewingClassId });
-      alert("Đã kích học sinh khỏi lớp!");
+      toast.success("Đã kích học sinh khỏi lớp!");
     },
-    onError: (err) => alert("Lỗi: " + err.message)
+    onError: (err) => toast.error("Lỗi: " + err.message)
   });
 
   const handleCreateClass = (e: React.FormEvent) => {
@@ -58,36 +59,11 @@ export default function TeacherDashboard() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert("Đã sao chép mã: " + text);
+    toast.success("Đã sao chép mã: " + text);
   };
 
   return (
     <div className="space-y-8">
-      {/* Real-time Notifications Banner */}
-      {notifications?.items && notifications.items.length > 0 && (
-        <div className="space-y-3">
-          {notifications.items.map((notif) => (
-            <div key={notif.id} className="glass-panel p-4 rounded-2xl border border-brand-accent/40 bg-brand-accent/10 flex items-center justify-between transition-all duration-300">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-brand-accent/20 rounded-xl text-brand-accent">
-                  <Bell className="w-5 h-5 animate-bounce" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-white text-sm">{notif.title}</h4>
-                  <p className="text-xs text-slate-300">{notif.body}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => markReadMutation.mutate({ id: notif.id }, { onSuccess: () => utils.notification.list.invalidate() })}
-                className="text-xs font-semibold text-brand-accent hover:text-white px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-              >
-                Đánh dấu đã đọc
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Header & Stats */}
       <div>
         <h1 className="text-3xl font-extrabold mb-6">Tổng quan</h1>

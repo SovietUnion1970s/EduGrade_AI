@@ -24,7 +24,7 @@ export const aiService = {
 
       // 2. Smart Model Routing: Select model based on answer length
       const isShortText = studentAnswer.trim().length < 200;
-      const baseModel = isShortText ? 'gemini-1.5-flash-001' : 'gemini-1.5-pro-001';
+      const baseModel = isShortText ? 'gemini-2.5-flash' : 'gemini-2.5-pro';
 
       if (!apiKey) {
         return { score: 1, reason: 'MOCKED: Vui lòng cấu hình GEMINI_API_KEY', confidence: 'HIGH' };

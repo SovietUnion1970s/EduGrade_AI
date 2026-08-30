@@ -333,6 +333,7 @@ model Notification {
   body String
   relatedEntityType String?
   relatedEntityId String?
+  actionUrl String?
   isRead Boolean @default(false)
   sentChannels Json @default("{}")
   createdAt DateTime @default(now())

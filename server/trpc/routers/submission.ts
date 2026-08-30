@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { router, protectedProcedure } from '../trpc';
+import { router, protectedProcedure, teacherProcedure } from '../trpc';
 import { prisma } from '@/lib/db';
 import { TRPCError } from '@trpc/server';
 import { gradingQueue } from '../../worker/queue';
@@ -25,27 +25,67 @@ export const submissionRouter = router({
       });
       if (!assignment || assignment.status !== 'PUBLISHED') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Bài tập này hiện chưa được mở.' });
 
-      const existingSub = await prisma.submission.findUnique({
+      let submission = await prisma.submission.findUnique({
         where: { assignmentId_studentId: { assignmentId: input.assignmentId, studentId: ctx.session.user.id! } }
       });
-      if (existingSub) throw new TRPCError({ code: 'CONFLICT', message: 'Bạn đã nộp bài này rồi.' });
 
-      const submission = await prisma.submission.create({
-        data: {
-          assignmentId: input.assignmentId,
-          studentId: ctx.session.user.id!,
-          status: 'GRADING',
-          submittedAt: new Date(),
-          antiCheatLog: input.antiCheatLog ? JSON.parse(JSON.stringify(input.antiCheatLog)) : [],
-          answers: {
-            create: input.answers.map(ans => ({
-              questionId: ans.questionId,
-              answerText: ans.answerText,
-              answerFileUrl: ans.answerFileUrl
-            }))
+      if (submission && submission.status !== 'IN_PROGRESS') {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Bạn đã nộp bài này rồi.' });
+      }
+
+      const data = {
+        status: 'GRADING' as any,
+        submittedAt: new Date(),
+        antiCheatLog: input.antiCheatLog ? JSON.parse(JSON.stringify(input.antiCheatLog)) : [],
+      };
+
+      if (submission) {
+        submission = await prisma.submission.update({
+          where: { id: submission.id },
+          data: {
+            ...data,
+            answers: {
+              create: input.answers.map(ans => ({
+                questionId: ans.questionId,
+                answerText: ans.answerText,
+                answerFileUrl: ans.answerFileUrl
+              }))
+            }
           }
-        }
+        });
+      } else {
+        submission = await prisma.submission.create({
+          data: {
+            assignmentId: input.assignmentId,
+            studentId: ctx.session.user.id!,
+            ...data,
+            answers: {
+              create: input.answers.map(ans => ({
+                questionId: ans.questionId,
+                answerText: ans.answerText,
+                answerFileUrl: ans.answerFileUrl
+              }))
+            }
+          }
+        });
+      }
+
+      const assignmentObj = await prisma.assignment.findUnique({
+        where: { id: input.assignmentId },
+        include: { class: true }
       });
+
+      if (assignmentObj) {
+        await prisma.notification.create({
+          data: {
+            userId: assignmentObj.class.teacherId,
+            type: 'SYSTEM',
+            title: `Học sinh nộp bài mới`,
+            body: `Một học sinh vừa nộp bài thi: ${assignmentObj.title}`,
+            actionUrl: `/teacher/submissions/${submission.id}`
+          }
+        });
+      }
 
       await gradingQueue.add('grade-submission', { submissionId: submission.id });
       return { submissionId: submission.id, message: 'Nộp bài thành công. AI đang chấm điểm bất đồng bộ.' };

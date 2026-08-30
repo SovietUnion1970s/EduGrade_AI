@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle, Clock, Bot, FileText, ArrowRight, ShieldCheck }
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 
 export default function SubmissionResultPage() {
   const params = useParams();
@@ -152,15 +153,15 @@ function StudentAppealCard({ gradeId }: { gradeId: string }) {
       utils.grade.getAppeals.invalidate({ gradeId });
       setReason("");
       setIsFormOpen(false);
-      alert("Đã gửi đơn phúc khảo thành công! Giáo viên sẽ phản hồi sớm.");
+      toast.success("Đã gửi đơn phúc khảo thành công! Giáo viên sẽ phản hồi sớm.");
     },
-    onError: (err) => alert("Lỗi gửi phúc khảo: " + err.message)
+    onError: (err) => toast.error("Lỗi gửi phúc khảo: " + err.message)
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (reason.length < 20) {
-      alert("Lý do phúc khảo phải từ 20 ký tự trở lên.");
+      toast.error("Lý do phúc khảo phải từ 20 ký tự trở lên.");
       return;
     }
     createAppealMutation.mutate({ gradeId, reason });

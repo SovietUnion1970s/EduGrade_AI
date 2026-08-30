@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 
+import { toast } from "sonner";
+
 export default function TeacherDualColumnGradingPage() {
   const params = useParams();
   const submissionId = params.submissionId as string;
@@ -37,31 +39,31 @@ export default function TeacherDualColumnGradingPage() {
   const overrideMutation = trpc.grade.override.useMutation({
     onSuccess: () => {
       utils.grade.get.invalidate({ submissionId });
-      alert("Đã cập nhật & ghi đè điểm số thành công!");
+      toast.success("Đã cập nhật & ghi đè điểm số thành công!");
     },
-    onError: (err) => alert("Lỗi ghi đè điểm: " + err.message),
+    onError: (err) => toast.error("Lỗi ghi đè điểm: " + err.message),
   });
 
   const publishMutation = trpc.grade.publish.useMutation({
     onSuccess: () => {
       utils.grade.get.invalidate({ submissionId });
-      alert("Đã công bố điểm cho học sinh thành công!");
+      toast.success("Đã công bố điểm cho học sinh thành công!");
     },
-    onError: (err) => alert("Lỗi công bố điểm: " + err.message),
+    onError: (err) => toast.error("Lỗi công bố điểm: " + err.message),
   });
 
   const resolveAppealMutation = trpc.grade.resolveAppeal.useMutation({
     onSuccess: () => {
       utils.grade.getAppeals.invalidate({ gradeId: grade?.id || "" });
-      alert("Đã phản hồi đơn phúc khảo!");
+      toast.success("Đã phản hồi đơn phúc khảo!");
     },
-    onError: (err) => alert("Lỗi xử lý phúc khảo: " + err.message),
+    onError: (err) => toast.error("Lỗi xử lý phúc khảo: " + err.message),
   });
 
   const handleSaveOverride = () => {
     if (!grade) return;
     if (!overrideReason || overrideReason.trim().length < 5) {
-      alert("Giáo viên vui lòng ghi rõ lý do sửa điểm (tối thiểu 5 ký tự).");
+      toast.error("Giáo viên vui lòng ghi rõ lý do sửa điểm (tối thiểu 5 ký tự).");
       return;
     }
 
@@ -80,7 +82,7 @@ export default function TeacherDualColumnGradingPage() {
 
   const handlePublish = () => {
     if (!grade) return;
-    if (confirm("Xác nhận phê duyệt và công bố điểm bài thi này cho học sinh?")) {
+    if (window.confirm("Xác nhận phê duyệt và công bố điểm bài thi này cho học sinh?")) {
       publishMutation.mutate({ gradeId: grade.id });
     }
   };
