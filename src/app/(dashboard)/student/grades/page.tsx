@@ -1,21 +1,32 @@
 "use client";
 
 import { trpc } from "@/lib/trpc";
-import { BookOpen, Calendar, ChevronRight, FileText, GraduationCap, Award } from "lucide-react";
+import { BookOpen, Calendar, ChevronRight, FileText, GraduationCap, Award, CheckCircle } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 
 export default function StudentGradesPage() {
   const { data: submissions, isLoading } = trpc.submission.getMyGrades.useQuery();
 
-  const groupedBySubject = useMemo(() => {
-    if (!submissions) return {};
-    return submissions.reduce((acc, sub) => {
-      const subject = sub.assignment.class.subject || "Khác";
-      if (!acc[subject]) acc[subject] = [];
-      acc[subject].push(sub);
-      return acc;
-    }, {} as Record<string, typeof submissions>);
+  // Bảng điểm cần có tính toán tổng hợp (Summary)
+  const stats = useMemo(() => {
+    if (!submissions || submissions.length === 0) return { total: 0, graded: 0, avg: 0 };
+    
+    let gradedCount = 0;
+    let totalScore = 0;
+    
+    submissions.forEach(sub => {
+      if (sub.grade && sub.grade.status === 'APPROVED') {
+        gradedCount++;
+        totalScore += Number(sub.grade.totalScore || 0);
+      }
+    });
+
+    return {
+      total: submissions.length,
+      graded: gradedCount,
+      avg: gradedCount > 0 ? (totalScore / gradedCount).toFixed(2) : 0
+    };
   }, [submissions]);
 
   if (isLoading) {
@@ -24,12 +35,12 @@ export default function StudentGradesPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-20">
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl border-white/5 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-brand-accent/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+      {/* Tiêu đề */}
+      <div className="glass-panel p-6 sm:p-8 rounded-3xl border-white/5 relative overflow-hidden bg-gradient-to-r from-brand-accent/20 to-transparent">
         <h1 className="text-3xl font-extrabold text-white mb-2 flex items-center gap-3 relative z-10">
-          <GraduationCap className="w-8 h-8 text-brand-accent" /> Bảng điểm & Học tập
+          <GraduationCap className="w-8 h-8 text-brand-accent" /> Bảng điểm Tổng hợp
         </h1>
-        <p className="text-slate-400 relative z-10">Theo dõi kết quả các bài thi đã làm, điểm số và phản hồi từ giáo viên.</p>
+        <p className="text-slate-300 relative z-10 font-medium">Theo dõi chi tiết kết quả học tập, điểm số trung bình và tiến độ hoàn thành các bài thi.</p>
       </div>
 
       {!submissions || submissions.length === 0 ? (
@@ -40,55 +51,104 @@ export default function StudentGradesPage() {
         </div>
       ) : (
         <div className="space-y-8">
-          {Object.entries(groupedBySubject).map(([subject, subs]) => (
-            <div key={subject} className="space-y-4">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2 border-b border-white/10 pb-2">
-                <BookOpen className="w-5 h-5 text-indigo-400" /> Môn: {subject}
-              </h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {subs.map((sub) => {
-                  const isGraded = sub.grade && sub.grade.status === 'APPROVED';
-                  return (
-                    <Link 
-                      href={`/student/submissions/${sub.id}`} 
-                      key={sub.id}
-                      className="glass-panel p-5 rounded-2xl border border-white/5 hover:border-brand-accent/50 hover:-translate-y-1 transition-all duration-300 group block relative overflow-hidden"
-                    >
-                      <div className="mb-3">
-                        <h3 className="font-bold text-white text-base leading-tight group-hover:text-brand-accent transition-colors">{sub.assignment.title}</h3>
-                        <p className="text-xs text-slate-400 mt-1">{sub.assignment.class.name}</p>
-                      </div>
-                      
-                      <div className="flex items-end justify-between mt-4 pt-4 border-t border-white/10">
-                        <div>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Trạng thái</p>
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                            isGraded ? 'bg-emerald-500/20 text-emerald-400' : 
-                            sub.status === 'GRADING' ? 'bg-amber-500/20 text-amber-400' : 
-                            'bg-blue-500/20 text-blue-400'
-                          }`}>
-                            {isGraded ? 'Đã có điểm' : sub.status === 'GRADING' ? 'Đang chấm' : 'Chưa có điểm'}
-                          </span>
-                        </div>
-                        
-                        <div className="text-right">
-                          <p className="text-[10px] text-slate-500 font-bold uppercase mb-1">Điểm số</p>
-                          {isGraded ? (
-                            <p className="text-xl font-black text-emerald-400 flex items-center justify-end gap-1">
-                              <Award className="w-4 h-4" /> {Number(sub.grade?.totalScore).toFixed(1)}
-                            </p>
-                          ) : (
-                            <p className="text-sm font-semibold text-slate-400">-- / 10</p>
-                          )}
-                        </div>
-                      </div>
-                    </Link>
-                  )
-                })}
+          {/* Dashboard Thống kê */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="glass-panel p-6 rounded-2xl border border-white/5 flex items-center gap-4">
+              <div className="p-4 bg-blue-500/10 text-blue-400 rounded-xl">
+                <FileText className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Tổng số bài nộp</p>
+                <p className="text-2xl font-black text-white">{stats.total}</p>
               </div>
             </div>
-          ))}
+            <div className="glass-panel p-6 rounded-2xl border border-white/5 flex items-center gap-4">
+              <div className="p-4 bg-emerald-500/10 text-emerald-400 rounded-xl">
+                <CheckCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Đã có điểm</p>
+                <p className="text-2xl font-black text-white">{stats.graded}</p>
+              </div>
+            </div>
+            <div className="glass-panel p-6 rounded-2xl border border-brand-accent/20 bg-brand-accent/5 flex items-center gap-4 shadow-[0_0_20px_rgba(99,102,241,0.1)]">
+              <div className="p-4 bg-brand-accent/20 text-brand-accent rounded-xl">
+                <Award className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-xs text-brand-accent font-bold uppercase tracking-wider">Điểm Trung Bình</p>
+                <p className="text-3xl font-black text-white">{stats.avg} <span className="text-sm font-medium text-slate-400">/ 10</span></p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bảng điểm chi tiết kiểu Đại học */}
+          <div className="glass-panel rounded-3xl border border-white/5 overflow-hidden shadow-lg">
+            <div className="p-6 border-b border-white/5 bg-white/5">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-indigo-400" /> Chi tiết kết quả học tập
+              </h2>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-black/40 text-xs uppercase tracking-wider text-slate-400">
+                    <th className="py-4 px-6 font-bold border-b border-white/5">Môn học</th>
+                    <th className="py-4 px-6 font-bold border-b border-white/5">Tên đề thi</th>
+                    <th className="py-4 px-6 font-bold border-b border-white/5">Ngày nộp</th>
+                    <th className="py-4 px-6 font-bold border-b border-white/5">Trạng thái</th>
+                    <th className="py-4 px-6 font-bold border-b border-white/5 text-right">Điểm số</th>
+                    <th className="py-4 px-6 font-bold border-b border-white/5 text-center">Chi tiết</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 text-sm">
+                  {submissions.map((sub) => {
+                    const isGraded = sub.grade && sub.grade.status === 'APPROVED';
+                    return (
+                      <tr key={sub.id} className="hover:bg-white/5 transition-colors group">
+                        <td className="py-4 px-6 font-semibold text-slate-300">
+                          {sub.assignment.class.subject || "Khác"}
+                          <span className="block text-[11px] text-slate-500 font-normal">{sub.assignment.class.name}</span>
+                        </td>
+                        <td className="py-4 px-6 text-white font-medium">
+                          {sub.assignment.title}
+                        </td>
+                        <td className="py-4 px-6 text-slate-400 text-xs">
+                          {sub.submittedAt ? new Date(sub.submittedAt).toLocaleDateString('vi-VN') : '---'}
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 ${
+                            isGraded ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
+                            sub.status === 'GRADING' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 
+                            'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                          }`}>
+                            {isGraded ? 'Đã có điểm' : sub.status === 'GRADING' ? 'Đang chấm' : 'Chờ chấm'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-right">
+                          {isGraded ? (
+                            <span className="text-xl font-black text-emerald-400">{Number(sub.grade?.totalScore).toFixed(1)}</span>
+                          ) : (
+                            <span className="text-sm font-semibold text-slate-500">--</span>
+                          )}
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <Link 
+                            href={`/student/submissions/${sub.id}`}
+                            className="inline-flex p-2 bg-brand-accent/10 hover:bg-brand-accent text-brand-accent hover:text-white rounded-lg transition-colors"
+                            title="Xem chi tiết"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
     </div>

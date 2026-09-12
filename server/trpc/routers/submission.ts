@@ -79,7 +79,7 @@ export const submissionRouter = router({
         await prisma.notification.create({
           data: {
             userId: assignmentObj.class.teacherId,
-            type: 'SYSTEM',
+            type: 'SUBMISSION_RECEIVED',
             title: `Học sinh nộp bài mới`,
             body: `Một học sinh vừa nộp bài thi: ${assignmentObj.title}`,
             actionUrl: `/teacher/submissions/${submission.id}`
@@ -154,6 +154,7 @@ export const submissionRouter = router({
           id: sub.id,
           student: sub.student,
           submittedAt: sub.submittedAt,
+          status: sub.status,
           antiCheatLog: logs,
           violationCount: count,
           riskLevel

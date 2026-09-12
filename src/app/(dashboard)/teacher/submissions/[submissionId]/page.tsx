@@ -1,12 +1,13 @@
 "use client";
 
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Bot, CheckCircle, ShieldAlert, FileText, User, Save, Send, AlertTriangle, MessageSquare, Sparkles } from "lucide-react";
+import { ArrowLeft, Bot, CheckCircle, ShieldAlert, FileText, User, Save, Send, AlertTriangle, MessageSquare, Sparkles, ZoomIn, X, Image as ImageIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 
 import { toast } from "sonner";
+import { MathRenderer } from "@/components/shared/math-renderer";
 
 export default function TeacherDualColumnGradingPage() {
   const params = useParams();
@@ -22,6 +23,7 @@ export default function TeacherDualColumnGradingPage() {
   const [editedScores, setEditedScores] = useState<Record<string, { score: string; comment: string }>>({});
   const [overrideReason, setOverrideReason] = useState("");
   const [appealResponses, setAppealResponses] = useState<Record<string, string>>({});
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   useEffect(() => {
     if (grade?.breakdowns) {
@@ -60,6 +62,22 @@ export default function TeacherDualColumnGradingPage() {
     onError: (err) => toast.error("Lỗi xử lý phúc khảo: " + err.message),
   });
 
+  const triggerAiGradingMutation = trpc.grade.triggerAiGrading.useMutation({
+    onSuccess: () => {
+      utils.grade.get.invalidate({ submissionId });
+      toast.success("AI đã chấm xong!");
+    },
+    onError: (err) => toast.error("Lỗi khi chấm AI: " + err.message),
+  });
+
+  const createManualDraftMutation = trpc.grade.createManualDraft.useMutation({
+    onSuccess: () => {
+      utils.grade.get.invalidate({ submissionId });
+      toast.success("Đã bật chế độ chấm thủ công!");
+    },
+    onError: (err) => toast.error("Lỗi: " + err.message),
+  });
+
   const handleSaveOverride = () => {
     if (!grade) return;
     if (!overrideReason || overrideReason.trim().length < 5) {
@@ -87,7 +105,7 @@ export default function TeacherDualColumnGradingPage() {
     }
   };
 
-  if (isLoadingSub || isLoadingGrade) return <div className="text-slate-400 text-center py-20">Đang tải bảng chấm điểm 2 cột...</div>;
+  if (isLoadingSub) return <div className="text-slate-400 text-center py-20">Đang tải thông tin bài nộp...</div>;
   if (!submission) return <div className="text-brand-danger text-center py-20">Không tìm thấy bài nộp.</div>;
 
   const antiCheatLogs = (submission.antiCheatLog as any[]) || [];
@@ -179,19 +197,57 @@ export default function TeacherDualColumnGradingPage() {
             {submission.answers.map((ans, index) => (
               <div key={ans.id} className="glass-panel p-6 rounded-3xl border border-white/5 space-y-3 relative">
                 <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                  <span className="font-bold text-white">Câu {index + 1}: {ans.question.content}</span>
-                  <span className="text-xs text-slate-400">Điểm tối đa: {Number(ans.question.maxScore)}đ</span>
+                  <div className="font-bold text-white flex-1 pr-4">
+                    <span className="text-brand-accent mr-1">Câu {index + 1}:</span>
+                    <MathRenderer content={ans.question.content} className="inline" />
+                  </div>
+                  <span className="text-xs text-slate-400 shrink-0">Điểm tối đa: {Number(ans.question.maxScore)}đ</span>
                 </div>
 
                 <div className="bg-black/30 p-4 rounded-2xl border border-white/5 space-y-2">
                   <p className="text-xs text-slate-400 font-bold uppercase">Nội dung học sinh nhập:</p>
-                  <p className="text-slate-200 font-mono text-sm whitespace-pre-wrap leading-relaxed">
-                    {ans.answerText || <em className="text-slate-600">Học sinh không nhập văn bản.</em>}
-                  </p>
+                  <div className="text-slate-200 text-sm leading-relaxed">
+                    {ans.answerText ? (
+                      <MathRenderer content={ans.answerText} />
+                    ) : (
+                      <em className="text-slate-600">Học sinh không nhập văn bản.</em>
+                    )}
+                  </div>
 
                   {ans.answerFileUrl && (
-                    <div className="pt-2 border-t border-white/5 text-xs text-emerald-400 flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" /> Đã bóc chữ OCR từ Ảnh làm bài
+                    <div className="pt-3 border-t border-white/10 space-y-2">
+                      <div className="text-xs text-emerald-400 flex items-center gap-2 font-semibold">
+                        <Sparkles className="w-4 h-4" /> Đã bóc chữ OCR từ Ảnh làm bài viết tay
+                      </div>
+                      <div className="flex items-center gap-4 bg-white/5 p-3 rounded-2xl border border-white/10 hover:border-brand-accent/40 transition-colors">
+                        <div 
+                          className="relative group cursor-pointer overflow-hidden rounded-xl border border-white/20 w-16 h-16 bg-black/40 flex-shrink-0"
+                          onClick={() => setLightboxImage(ans.answerFileUrl)}
+                        >
+                          <img 
+                            src={ans.answerFileUrl} 
+                            alt="Ảnh bài làm viết tay" 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <ZoomIn className="w-5 h-5 text-white" />
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                            <ImageIcon className="w-3.5 h-3.5 text-brand-accent" />
+                            Ảnh gốc viết tay học sinh đã nộp
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">Bấm vào ảnh để phóng to đối chiếu nét chữ với text bóc tách.</p>
+                          <button
+                            type="button"
+                            onClick={() => setLightboxImage(ans.answerFileUrl)}
+                            className="text-xs text-brand-accent hover:underline flex items-center gap-1 mt-1 font-bold"
+                          >
+                            <ZoomIn className="w-3.5 h-3.5" /> Phóng to xem ảnh gốc
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -208,7 +264,33 @@ export default function TeacherDualColumnGradingPage() {
                 <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
                   <Bot className="w-5 h-5 text-brand-accent" /> AI Đánh Giá & Ghi Đè Điểm
                 </h2>
-                <p className="text-xs text-slate-400 mt-1">Giáo viên có thể chỉnh sửa điểm và nhận xét của AI dưới đây.</p>
+                <p className="text-xs text-slate-400 mt-1 mb-3">Giáo viên có thể chỉnh sửa điểm và nhận xét của AI dưới đây.</p>
+                {grade && grade.status !== 'APPROVED' && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (window.confirm("Thao tác này sẽ xóa điểm AI hiện tại và yêu cầu AI chấm lại từ đầu. Bạn có chắc chắn?")) {
+                          triggerAiGradingMutation.mutate({ submissionId });
+                        }
+                      }}
+                      disabled={triggerAiGradingMutation.isPending}
+                      className="px-3 py-1.5 bg-brand-accent/20 hover:bg-brand-accent text-brand-accent hover:text-white rounded-lg text-[11px] font-bold transition-all border border-brand-accent/30 disabled:opacity-50"
+                    >
+                      {triggerAiGradingMutation.isPending ? "Đang chấm lại..." : "🔄 Yêu cầu AI chấm lại"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm("Thao tác này sẽ xóa điểm AI hiện tại và chuyển sang chế độ chấm thủ công 100%. Bạn có chắc chắn?")) {
+                          createManualDraftMutation.mutate({ submissionId });
+                        }
+                      }}
+                      disabled={createManualDraftMutation.isPending}
+                      className="px-3 py-1.5 bg-slate-700/50 hover:bg-slate-600 text-slate-300 hover:text-white rounded-lg text-[11px] font-bold transition-all disabled:opacity-50"
+                    >
+                      {createManualDraftMutation.isPending ? "Đang reset..." : "🧹 Chuyển sang chấm tay"}
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="text-right">
@@ -218,6 +300,32 @@ export default function TeacherDualColumnGradingPage() {
                 </span>
               </div>
             </div>
+
+            {/* Trạng thái chưa có điểm AI */}
+            {isLoadingGrade && <div className="text-center py-6 text-slate-400">Đang tải điểm...</div>}
+            
+            {!isLoadingGrade && !grade && (
+              <div className="text-center py-8">
+                <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+                <p className="text-slate-300 mb-4">Chưa có kết quả chấm điểm từ AI (hoặc bạn muốn tự chấm hoàn toàn).</p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <button
+                    onClick={() => triggerAiGradingMutation.mutate({ submissionId })}
+                    disabled={triggerAiGradingMutation.isPending || createManualDraftMutation.isPending}
+                    className="bg-brand-accent hover:bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-premium disabled:opacity-50"
+                  >
+                    {triggerAiGradingMutation.isPending ? "AI Đang chấm..." : "Tham khảo AI chấm"}
+                  </button>
+                  <button
+                    onClick={() => createManualDraftMutation.mutate({ submissionId })}
+                    disabled={createManualDraftMutation.isPending || triggerAiGradingMutation.isPending}
+                    className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-premium disabled:opacity-50"
+                  >
+                    {createManualDraftMutation.isPending ? "Đang xử lý..." : "Chấm thủ công (Bỏ qua AI)"}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Chi tiết từng Breakdown điểm */}
             {grade?.breakdowns.map((bd) => (
@@ -364,6 +472,29 @@ export default function TeacherDualColumnGradingPage() {
           )}
         </div>
       </div>
+
+      {/* Lightbox Modal phóng to ảnh bài làm viết tay */}
+      {lightboxImage && (
+        <div 
+          className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div className="relative max-w-5xl max-h-[90vh] flex flex-col items-center" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setLightboxImage(null)}
+              className="absolute -top-12 right-0 bg-white/20 hover:bg-white/40 text-white p-2 rounded-full transition-all"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img 
+              src={lightboxImage} 
+              alt="Ảnh bài làm viết tay của học sinh" 
+              className="max-h-[85vh] max-w-full rounded-2xl shadow-2xl object-contain border border-white/20"
+            />
+            <p className="text-xs text-slate-300 mt-2 font-medium">Bấm vùng tối bên ngoài hoặc nút X để đóng</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

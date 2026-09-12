@@ -1,7 +1,7 @@
 "use client";
 
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, CheckCircle, Clock, Bot, FileText, ArrowRight, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CheckCircle, Clock, Bot, FileText, ArrowRight, ShieldCheck, ZoomIn, X, Image as ImageIcon } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -10,6 +10,7 @@ import { toast } from "sonner";
 export default function SubmissionResultPage() {
   const params = useParams();
   const submissionId = params.submissionId as string;
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   const { data: submission, isLoading } = trpc.submission.getById.useQuery({ id: submissionId }, { refetchInterval: query => query.state.data?.status === 'GRADING' ? 3000 : false });
   
@@ -39,7 +40,7 @@ export default function SubmissionResultPage() {
         {submission.status !== 'GRADING' && submission.grade && (
           <div className="flex items-center gap-4 bg-gradient-to-br from-brand-accent/20 to-indigo-900/40 border border-brand-accent/40 px-8 py-4 rounded-2xl shadow-[0_0_25px_rgba(99,102,241,0.2)]">
             <div className="text-right">
-              <p className="text-xs text-brand-accent font-bold uppercase tracking-widest mb-1 opacity-80">Tổng điểm AI</p>
+              <p className="text-xs text-brand-accent font-bold uppercase tracking-widest mb-1 opacity-80">Tổng điểm</p>
               <p className="text-4xl font-black text-white leading-none tracking-tight">
                 {Number(submission.grade.totalScore).toFixed(1)} <span className="text-xl text-brand-accent/60 font-medium">/ 10</span>
               </p>
@@ -59,20 +60,9 @@ export default function SubmissionResultPage() {
         </div>
       ) : submission.grade ? (
         <div className="space-y-8">
-          {/* Nhận xét chung */}
-          <div className="glass-panel p-8 rounded-3xl border border-brand-accent/20 bg-gradient-to-r from-brand-accent/10 to-transparent relative overflow-hidden">
-            <ShieldCheck className="absolute -right-10 -bottom-10 w-48 h-48 text-brand-accent/5" />
-            <h3 className="font-extrabold text-lg flex items-center gap-2 text-white mb-4 relative z-10">
-              <Bot className="w-6 h-6 text-brand-accent" /> Đánh giá tổng quan từ AI:
-            </h3>
-            <p className="text-slate-200 leading-relaxed text-lg relative z-10 font-medium">
-              {submission.grade.aiOverallComment}
-            </p>
-          </div>
-
           {/* Chi tiết từng câu */}
           <div>
-            <h3 className="text-2xl font-extrabold mt-10 mb-6 text-white flex items-center gap-3">
+            <h3 className="text-2xl font-extrabold mb-6 text-white flex items-center gap-3">
               <FileText className="w-6 h-6 text-emerald-400" /> Bảng điểm chi tiết
             </h3>
             
@@ -103,27 +93,52 @@ export default function SubmissionResultPage() {
                         <div className="text-slate-300 whitespace-pre-wrap text-base font-mono leading-relaxed">
                           {ans.answerText || <em className="text-slate-600">Bạn đã bỏ trống câu này.</em>}
                         </div>
-                      </div>
-                      
-                      {/* Cột AI chấm */}
-                      <div className="p-6 lg:p-8 space-y-4 bg-brand-accent/5">
-                        <p className="text-xs text-brand-accent font-bold uppercase tracking-wider flex items-center gap-2">
-                          <Bot className="w-4 h-4" /> Phân tích & Góp ý từ AI
-                        </p>
-                        <p className="text-base text-slate-200 leading-relaxed font-medium">
-                          {breakdown?.aiReasoning}
-                        </p>
-                        
-                        {/* Chi tiết rubric items hit */}
-                        {breakdown?.rubricItem && (
-                          <div className="mt-4 pt-4 border-t border-white/10">
-                            <p className="text-xs text-slate-500 font-semibold mb-2">Tiêu chí được ghi nhận:</p>
-                            <p className="text-sm text-emerald-400 flex items-start gap-2">
-                              <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                              {breakdown.rubricItem.description}
-                            </p>
+
+                        {ans.answerFileUrl && (
+                          <div className="pt-3 border-t border-white/5 space-y-2">
+                            <div className="flex items-center gap-3 bg-white/5 p-3 rounded-2xl border border-white/10 hover:border-brand-accent/40 transition-colors">
+                              <div 
+                                className="relative group cursor-pointer overflow-hidden rounded-xl border border-white/20 w-14 h-14 bg-black/40 flex-shrink-0"
+                                onClick={() => setLightboxImage(ans.answerFileUrl)}
+                              >
+                                <img 
+                                  src={ans.answerFileUrl} 
+                                  alt="Ảnh bài làm" 
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                  <ZoomIn className="w-5 h-5 text-white" />
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-white flex items-center gap-1">
+                                  <ImageIcon className="w-3.5 h-3.5 text-brand-accent" /> Ảnh bài làm viết tay đã nộp
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setLightboxImage(ans.answerFileUrl)}
+                                  className="text-xs text-brand-accent hover:underline flex items-center gap-1 mt-1 font-bold"
+                                >
+                                  <ZoomIn className="w-3 h-3" /> Xem lại ảnh bài làm
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         )}
+                      </div>
+                      
+                      {/* Cột Giáo viên nhận xét */}
+                      <div className="p-6 lg:p-8 space-y-4 bg-emerald-500/5">
+                        <p className="text-xs text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4" /> Lời phê của Giáo viên
+                        </p>
+                        <p className="text-base text-slate-200 leading-relaxed font-medium">
+                          {breakdown?.teacherComment ? (
+                            <span>{breakdown.teacherComment}</span>
+                          ) : (
+                            <em className="text-slate-500">Giáo viên không có lời phê riêng cho câu này.</em>
+                          )}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -137,6 +152,29 @@ export default function SubmissionResultPage() {
         </div>
       ) : (
         <div className="glass-panel p-12 text-center text-brand-danger font-bold text-lg">Đã xảy ra lỗi hệ thống trong quá trình chấm điểm. Vui lòng liên hệ Giáo viên.</div>
+      )}
+
+      {/* Lightbox Modal */}
+      {lightboxImage && (
+        <div 
+          className="fixed inset-0 z-[120] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setLightboxImage(null)}
+              className="absolute -top-12 right-0 bg-white/20 hover:bg-white/40 text-white p-2 rounded-full transition-all"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img 
+              src={lightboxImage} 
+              alt="Ảnh bài làm viết tay" 
+              className="max-h-[85vh] max-w-full rounded-2xl shadow-2xl object-contain border border-white/20"
+            />
+            <p className="text-xs text-slate-300 mt-2 font-medium">Bấm vùng tối bên ngoài hoặc nút X để đóng</p>
+          </div>
+        </div>
       )}
     </div>
   );

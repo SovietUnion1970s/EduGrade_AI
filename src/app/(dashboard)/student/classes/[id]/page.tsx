@@ -44,7 +44,10 @@ export default function StudentClassDetailsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {assignments?.map((a) => {
-              const hasSubmitted = a.submissions && a.submissions.length > 0;
+              const subs = (a.submissions as any[]) || [];
+              const hasSubmitted = subs.some(s => s.status && s.status !== 'IN_PROGRESS');
+              const inProgressSubmission = subs.find(s => s.status === 'IN_PROGRESS');
+              const completedSubmission = subs.find(s => s.status && s.status !== 'IN_PROGRESS');
 
               return (
                 <div key={a.id} className="p-5 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors flex flex-col justify-between">
@@ -57,12 +60,19 @@ export default function StudentClassDetailsPage() {
                   </div>
                   
                   <div className="pt-4 border-t border-white/5 flex justify-end">
-                    {hasSubmitted ? (
+                    {hasSubmitted && completedSubmission ? (
                       <Link 
-                        href={`/student/submissions/${a.submissions[0].id}`}
+                        href={`/student/submissions/${completedSubmission.id}`}
                         className="flex items-center gap-2 bg-emerald-500/20 text-emerald-400 px-5 py-2.5 rounded-xl font-bold hover:bg-emerald-500 hover:text-white transition-colors"
                       >
                         <CheckCircle className="w-4 h-4" /> Xem kết quả
+                      </Link>
+                    ) : inProgressSubmission ? (
+                      <Link 
+                        href={`/student/exams/${a.id}`}
+                        className="flex items-center gap-2 bg-amber-500/20 text-amber-400 px-5 py-2.5 rounded-xl font-bold hover:bg-amber-500 hover:text-white transition-colors"
+                      >
+                        <PlayCircle className="w-4 h-4" /> Tiếp tục làm bài
                       </Link>
                     ) : (
                       <Link 

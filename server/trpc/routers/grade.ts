@@ -222,5 +222,156 @@ export const gradeRouter = router({
       }
 
       return appeal;
+    }),
+
+  triggerAiGrading: teacherProcedure
+    .input(z.object({ submissionId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const submission = await prisma.submission.findUnique({
+        where: { id: input.submissionId },
+        include: {
+          assignment: { include: { questions: true } },
+          answers: { include: { question: { include: { rubricItems: true } } } }
+        }
+      });
+
+      if (!submission) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy bài nộp' });
+
+      // Cập nhật trạng thái thành GRADING
+      await prisma.submission.update({
+        where: { id: input.submissionId },
+        data: { status: 'GRADING' }
+      });
+
+      // Import aiService dynamically to avoid circular dependencies if any
+      const { aiService } = await import('../../services/ai.service');
+
+      const maxScore = submission.assignment.questions.reduce((acc, q) => acc + Number(q.maxScore), 0);
+
+      // Xóa điểm cũ nếu có
+      await prisma.grade.deleteMany({ where: { submissionId: input.submissionId } });
+
+      const grade = await prisma.grade.create({
+        data: {
+          submissionId: input.submissionId,
+          maxScore: new Prisma.Decimal(maxScore),
+          status: 'AI_DRAFT'
+        }
+      });
+
+      let aiTotalScore = 0;
+      
+      for (const answer of submission.answers) {
+        if (answer.answerText && answer.answerText.trim() !== "") {
+          const instruction = submission.assignment.aiGradingInstruction || 'Hãy chấm công bằng.';
+          try {
+            const aiResult = await aiService.gradeAnswer(
+              answer.questionId,
+              answer.question.content,
+              answer.answerText,
+              answer.question.rubricItems,
+              instruction
+            );
+            
+            aiTotalScore += aiResult.score;
+            
+            await prisma.gradeBreakdown.create({
+              data: {
+                gradeId: grade.id,
+                questionId: answer.questionId,
+                scoreAwarded: new Prisma.Decimal(aiResult.score),
+                aiScoreSuggested: new Prisma.Decimal(aiResult.score),
+                aiReasoning: aiResult.reason,
+                confidenceLevel: aiResult.confidence
+              }
+            });
+          } catch (err: any) {
+            await prisma.gradeBreakdown.create({
+              data: {
+                gradeId: grade.id,
+                questionId: answer.questionId,
+                scoreAwarded: new Prisma.Decimal(0),
+                aiScoreSuggested: new Prisma.Decimal(0),
+                aiReasoning: 'Lỗi khi gọi AI: ' + err.message,
+                confidenceLevel: 'LOW'
+              }
+            });
+          }
+        } else {
+          await prisma.gradeBreakdown.create({
+            data: {
+              gradeId: grade.id,
+              questionId: answer.questionId,
+              scoreAwarded: new Prisma.Decimal(0),
+              aiScoreSuggested: new Prisma.Decimal(0),
+              aiReasoning: 'Học sinh không trả lời (bỏ trống).',
+              confidenceLevel: 'HIGH'
+            }
+          });
+        }
+      }
+      
+      await prisma.grade.update({
+        where: { id: grade.id },
+        data: { 
+          aiTotalScore: new Prisma.Decimal(aiTotalScore), 
+          totalScore: new Prisma.Decimal(aiTotalScore) 
+        }
+      });
+
+      await prisma.submission.update({
+        where: { id: input.submissionId },
+        data: { status: 'GRADED' }
+      });
+      
+      return { success: true, aiTotalScore };
+    }),
+
+  createManualDraft: teacherProcedure
+    .input(z.object({ submissionId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const submission = await prisma.submission.findUnique({
+        where: { id: input.submissionId },
+        include: {
+          assignment: { include: { questions: true } },
+          answers: true
+        }
+      });
+      if (!submission) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy bài nộp' });
+
+      const maxScore = submission.assignment.questions.reduce((acc, q) => acc + Number(q.maxScore), 0);
+
+      // Xóa điểm cũ nếu có
+      await prisma.grade.deleteMany({ where: { submissionId: input.submissionId } });
+
+      const grade = await prisma.grade.create({
+        data: {
+          submissionId: input.submissionId,
+          maxScore: new Prisma.Decimal(maxScore),
+          status: 'OVERRIDDEN', // Marked as overridden because it's manual
+          aiTotalScore: new Prisma.Decimal(0),
+          totalScore: new Prisma.Decimal(0)
+        }
+      });
+
+      for (const answer of submission.answers) {
+        await prisma.gradeBreakdown.create({
+          data: {
+            gradeId: grade.id,
+            questionId: answer.questionId,
+            scoreAwarded: new Prisma.Decimal(0),
+            aiScoreSuggested: new Prisma.Decimal(0),
+            aiReasoning: 'Giáo viên chấm thủ công (Bỏ qua AI).',
+            confidenceLevel: 'HIGH'
+          }
+        });
+      }
+
+      await prisma.submission.update({
+        where: { id: input.submissionId },
+        data: { status: 'GRADED' }
+      });
+
+      return { success: true };
     })
 });

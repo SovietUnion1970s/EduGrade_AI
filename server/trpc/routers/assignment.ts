@@ -88,7 +88,9 @@ export const assignmentRouter = router({
         },
         include: {
           questions: { select: { id: true } },
-          submissions: role === 'STUDENT' ? { where: { studentId: ctx.session.user.id } } : { select: { id: true } }
+          submissions: role === 'STUDENT' 
+            ? { where: { studentId: ctx.session.user.id }, select: { id: true, status: true } } 
+            : { select: { id: true, status: true } }
         },
         orderBy: { createdAt: 'desc' }
       });

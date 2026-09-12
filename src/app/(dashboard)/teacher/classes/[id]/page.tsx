@@ -4,6 +4,8 @@ import { trpc } from "@/lib/trpc";
 import { Plus, Users, Settings, FileText, ArrowLeft, MoreVertical, UserMinus } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
+import { Search, Filter } from "lucide-react";
 
 export default function ClassDetailsPage() {
   const params = useParams();
@@ -12,6 +14,15 @@ export default function ClassDetailsPage() {
   
   const { data: classData, isLoading: isLoadingClass } = trpc.class.getById.useQuery({ id: classId }, { refetchInterval: 3000 });
   const { data: assignments, isLoading: isLoadingAssignments } = trpc.assignment.getAllByClass.useQuery({ classId });
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+
+  const filteredAssignments = assignments?.filter(a => {
+    const matchesSearch = a.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === "ALL" || a.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   const removeStudentMutation = trpc.class.removeStudent.useMutation({
     onSuccess: () => {
@@ -58,25 +69,57 @@ export default function ClassDetailsPage() {
             </Link>
           </div>
 
+          <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Tìm kiếm đề thi..." 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="glass-input w-full pl-10 pr-4 py-2.5 rounded-xl text-sm text-white"
+              />
+            </div>
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <select 
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="glass-input appearance-none pl-10 pr-10 py-2.5 rounded-xl text-sm text-white bg-transparent w-full sm:w-auto"
+              >
+                <option value="ALL" className="bg-slate-900">Tất cả trạng thái</option>
+                <option value="PUBLISHED" className="bg-slate-900">Đã công bố</option>
+                <option value="DRAFT" className="bg-slate-900">Bản nháp</option>
+                <option value="CLOSED" className="bg-slate-900">Đã đóng</option>
+                <option value="ARCHIVED" className="bg-slate-900">Lưu trữ</option>
+              </select>
+            </div>
+          </div>
+
           {isLoadingAssignments ? (
             <p className="text-slate-400">Đang tải danh sách bài tập...</p>
-          ) : assignments?.length === 0 ? (
+          ) : filteredAssignments?.length === 0 ? (
             <div className="glass-panel p-10 rounded-3xl text-center border border-white/5 border-dashed">
               <FileText className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-              <h3 className="text-lg font-medium text-white mb-1">Chưa có đề thi nào</h3>
-              <p className="text-sm text-slate-400">Nhấn nút tạo đề mới để bắt đầu giao bài cho học sinh.</p>
+              <h3 className="text-lg font-medium text-white mb-1">Không tìm thấy bài tập nào</h3>
+              <p className="text-sm text-slate-400">Thử thay đổi bộ lọc hoặc tạo đề thi mới.</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {assignments?.map(a => (
+            <div className="space-y-4 max-h-[700px] overflow-y-auto pr-2 custom-scrollbar">
+              {filteredAssignments?.map(a => (
                 <div key={a.id} className="glass-panel p-5 rounded-xl border border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:border-brand-accent/50 transition-colors">
                   <div>
                     <Link href={`/teacher/assignments/${a.id}`} className="text-lg font-bold text-white hover:text-brand-accent transition-colors block mb-1">
                       {a.title}
                     </Link>
                     <div className="flex items-center gap-3 text-xs text-slate-400">
-                      <span className={`px-2 py-0.5 rounded-full font-medium ${a.status === 'DRAFT' ? 'bg-amber-500/20 text-amber-500' : 'bg-emerald-500/20 text-emerald-500'}`}>
-                        {a.status === 'DRAFT' ? 'Bản nháp' : 'Đã công bố'}
+                      <span className={`px-2 py-0.5 rounded-full font-medium ${
+                        a.status === 'DRAFT' ? 'bg-amber-500/20 text-amber-500' : 
+                        a.status === 'CLOSED' ? 'bg-red-500/20 text-red-500' :
+                        a.status === 'ARCHIVED' ? 'bg-slate-500/20 text-slate-400' :
+                        'bg-emerald-500/20 text-emerald-500'
+                      }`}>
+                        {a.status === 'DRAFT' ? 'Bản nháp' : a.status === 'CLOSED' ? 'Đã đóng' : a.status === 'ARCHIVED' ? 'Lưu trữ' : 'Đã công bố'}
                       </span>
                       <span>{a.questions.length} câu hỏi</span>
                       <span>•</span>
@@ -86,7 +129,24 @@ export default function ClassDetailsPage() {
                   <div className="flex items-center gap-4">
                     <div className="text-right">
                       <p className="text-xs text-slate-400 mb-0.5">Đã nộp</p>
-                      <p className="font-semibold text-white">{a.submissions.length} / {classData.memberships.length}</p>
+                      {(() => {
+                        const subs = (a.submissions as any[]) || [];
+                        const submittedCount = subs.filter(s => s.status && s.status !== 'IN_PROGRESS').length;
+                        const inProgressCount = subs.filter(s => s.status === 'IN_PROGRESS').length;
+
+                        return (
+                          <div>
+                            <p className="font-semibold text-white">
+                              {submittedCount} / {classData.memberships.length}
+                            </p>
+                            {inProgressCount > 0 && (
+                              <span className="text-[10px] text-amber-400 font-bold block">
+                                ({inProgressCount} đang làm)
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                     <button className="p-2 hover:bg-white/10 rounded-lg text-slate-400 transition-colors">
                       <MoreVertical className="w-4 h-4" />

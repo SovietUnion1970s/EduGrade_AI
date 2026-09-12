@@ -26,7 +26,7 @@ export function NotificationBell() {
     onSuccess: () => refetch()
   });
 
-  const unreadCount = notifications?.meta?.unreadCount ?? 0;
+  const unreadCount = (notifications as any)?.unreadCount ?? (notifications as any)?.meta?.unreadCount ?? 0;
   const allItems = notifications?.items ?? [];
   const unreadItems = allItems.filter(n => !n.isRead);
 
@@ -37,24 +37,32 @@ export function NotificationBell() {
       return;
     }
 
-    // Only show toast if unread count actually increased
     if (unreadCount > prevCountRef.current && unreadItems.length > 0) {
       const newNotif = unreadItems[0];
-      toast.info(newNotif.title, {
-        description: newNotif.body,
-        duration: 6000,
-        action: {
-          label: "Xem ngay →",
-          onClick: () => {
+      toast.custom((t) => (
+        <div 
+          onClick={() => {
+            toast.dismiss(t);
             const url = (newNotif as any).actionUrl;
             if (url) {
               router.push(url);
             } else {
               setIsOpen(true);
             }
-          }
-        }
-      });
+          }}
+          className="flex items-start gap-4 p-4 w-[350px] bg-[#111827]/90 backdrop-blur-xl border border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.4)] rounded-2xl cursor-pointer hover:bg-[#1f2937]/90 transition-all duration-300 animate-in slide-in-from-top-2 relative overflow-hidden group"
+        >
+          <div className="absolute top-0 left-0 w-1 h-full bg-brand-accent group-hover:bg-indigo-400 transition-colors"></div>
+          <div className="p-2 bg-brand-accent/20 rounded-full shrink-0 border border-brand-accent/30 text-brand-accent group-hover:scale-110 transition-transform">
+            <Bell className="w-5 h-5 animate-pulse" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-white text-sm line-clamp-1 group-hover:text-brand-accent transition-colors">{newNotif.title}</p>
+            <p className="text-slate-300 text-xs mt-1 leading-relaxed line-clamp-2">{newNotif.body}</p>
+            <p className="text-[10px] text-brand-accent/80 font-medium mt-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">Nhấn để xem chi tiết →</p>
+          </div>
+        </div>
+      ), { duration: 5000 });
     }
     prevCountRef.current = unreadCount;
   }, [unreadCount]); // chỉ dep vào unreadCount, không dep vào unreadItems để tránh re-run liên tục

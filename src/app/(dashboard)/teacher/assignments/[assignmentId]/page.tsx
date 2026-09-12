@@ -1,11 +1,14 @@
 "use client";
 
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, CheckCircle, Plus, BrainCircuit, AlignLeft, ShieldAlert, AlertTriangle } from "lucide-react";
+import { ArrowLeft, CheckCircle, Plus, BrainCircuit, AlignLeft, ShieldAlert, AlertTriangle, Clock, Download } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { QuestionType } from "@prisma/client";
+import { toast } from "sonner";
+import { MathRenderer } from "@/components/shared/math-renderer";
+import { MathToolbar } from "@/components/shared/math-toolbar";
 
 export default function AssignmentEditorPage() {
   const params = useParams();
@@ -19,6 +22,71 @@ export default function AssignmentEditorPage() {
   const [isAddingQuestion, setIsAddingQuestion] = useState(false);
   const [content, setContent] = useState("");
   const [maxScore, setMaxScore] = useState("10");
+
+  const [isUploading, setIsUploading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportExcel = async () => {
+    if (!assignment) return;
+    setIsExporting(true);
+    try {
+      const res = await fetch(`/api/v1/classes/${assignment.classId}/assignments/${assignmentId}/export-excel`);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Không thể tạo file Excel');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `BangDiem_${assignment.class.name}_${assignment.title}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Đã xuất báo cáo bảng điểm Excel thành công!");
+    } catch (err: any) {
+      toast.error("Lỗi xuất Excel: " + err.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch(`/api/v1/assignments/${assignmentId}/generate-questions`, {
+        method: 'POST',
+        body: formData
+      });
+      const result = await res.json();
+      
+      if (!res.ok) {
+        toast.error("Lỗi: " + result.error.message);
+        if (result.error.details?.issues) {
+          toast.warning("AI cảnh báo: " + result.error.details.issues);
+        }
+      } else {
+        toast.success(`Đã tạo thành công ${result.data.count} câu hỏi từ file!`);
+        if (result.data.warning) {
+          toast.warning("AI lưu ý: " + result.data.warning);
+        }
+        utils.assignment.getById.invalidate({ id: assignmentId });
+      }
+    } catch (err: any) {
+      toast.error("Lỗi tải file: " + err.message);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const addQuestionMutation = trpc.assignment.addQuestion.useMutation({
     onSuccess: () => {
@@ -58,15 +126,27 @@ export default function AssignmentEditorPage() {
             </div>
           </div>
           
-          {assignment.status === 'DRAFT' && (
-            <button 
-              onClick={() => publishMutation.mutate({ id: assignmentId })}
-              disabled={assignment.questions.length === 0 || publishMutation.isPending}
-              className="flex w-full md:w-auto justify-center items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold shadow-premium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            {/* Nút Xuất Bảng Điểm Excel */}
+            <button
+              onClick={handleExportExcel}
+              disabled={isExporting}
+              className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-xl font-bold shadow-lg transition-all disabled:opacity-50"
             >
-              <CheckCircle className="w-5 h-5" /> Công bố đề thi
+              <Download className="w-5 h-5" />
+              {isExporting ? "Đang tạo file..." : "Xuất Bảng Điểm (.xlsx)"}
             </button>
-          )}
+
+            {assignment.status === 'DRAFT' && (
+              <button 
+                onClick={() => publishMutation.mutate({ id: assignmentId })}
+                disabled={assignment.questions.length === 0 || publishMutation.isPending}
+                className="flex items-center justify-center gap-2 bg-brand-accent hover:bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold shadow-premium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CheckCircle className="w-5 h-5" /> Công bố đề thi
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -82,8 +162,8 @@ export default function AssignmentEditorPage() {
               {Number(q.maxScore)} điểm
             </div>
             <h3 className="font-bold text-lg mb-3 text-white flex items-center gap-2">Câu {index + 1}</h3>
-            <div className="text-slate-300 whitespace-pre-wrap leading-relaxed bg-white/5 p-4 rounded-xl">
-              {q.content}
+            <div className="text-slate-300 leading-relaxed bg-white/5 p-4 rounded-xl">
+              <MathRenderer content={q.content} />
             </div>
           </div>
         ))}
@@ -95,14 +175,19 @@ export default function AssignmentEditorPage() {
               <h3 className="font-bold mb-4 text-white">Thêm câu hỏi tự luận mới</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Nội dung câu hỏi</label>
+                  <MathToolbar
+                    label="Soạn thảo Đề bài & Công thức Toán KaTeX"
+                    currentValue={content}
+                    onInsert={(snippet) => setContent(prev => prev + snippet)}
+                  />
                   <textarea 
                     value={content}
                     onChange={e => setContent(e.target.value)}
-                    className="glass-input w-full p-4 rounded-xl h-32 resize-none text-white"
-                    placeholder="Nhập nội dung đề bài (Hỗ trợ xuống dòng)..."
+                    className="glass-input w-full p-4 rounded-xl h-32 resize-none text-white font-mono text-sm"
+                    placeholder="Nhập nội dung đề bài (Hỗ trợ công thức Toán/Lý/Hóa kẹp giữa $...$ hoặc $$...$$)..."
                   />
                 </div>
+
                 <div>
                   <label className="block text-sm text-slate-400 mb-1">Điểm tối đa</label>
                   <input 
@@ -135,97 +220,161 @@ export default function AssignmentEditorPage() {
               </div>
             </div>
           ) : (
-            <button 
-              onClick={() => setIsAddingQuestion(true)}
-              className="w-full glass-panel border-2 border-dashed border-slate-600 hover:border-brand-accent/50 text-slate-400 hover:text-white p-8 rounded-3xl flex flex-col items-center justify-center gap-3 transition-all group"
-            >
-              <div className="p-4 bg-white/5 group-hover:bg-brand-accent/20 rounded-full transition-colors">
-                <Plus className="w-8 h-8 group-hover:text-brand-accent" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button 
+                onClick={() => setIsAddingQuestion(true)}
+                className="w-full glass-panel border-2 border-dashed border-slate-600 hover:border-brand-accent/50 text-slate-400 hover:text-white p-8 rounded-3xl flex flex-col items-center justify-center gap-3 transition-all group"
+              >
+                <div className="p-4 bg-white/5 group-hover:bg-brand-accent/20 rounded-full transition-colors">
+                  <Plus className="w-8 h-8 group-hover:text-brand-accent" />
+                </div>
+                <span className="font-bold text-lg">Thêm câu hỏi thủ công</span>
+                <span className="text-sm opacity-70">Tự nhập nội dung và thiết lập điểm số</span>
+              </button>
+              
+              <div className="w-full glass-panel border-2 border-dashed border-slate-600 hover:border-emerald-500/50 text-slate-400 hover:text-white p-8 rounded-3xl flex flex-col items-center justify-center gap-3 transition-all group relative">
+                <input 
+                  type="file" 
+                  accept="image/*,.pdf" 
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed" 
+                  onChange={handleFileUpload}
+                  ref={fileInputRef}
+                  disabled={isUploading}
+                  title="Tải lên ảnh hoặc PDF đề thi"
+                />
+                <div className="p-4 bg-white/5 group-hover:bg-emerald-500/20 rounded-full transition-colors">
+                  {isUploading ? (
+                    <Clock className="w-8 h-8 group-hover:text-emerald-500 animate-spin" />
+                  ) : (
+                    <BrainCircuit className="w-8 h-8 group-hover:text-emerald-500" />
+                  )}
+                </div>
+                <span className="font-bold text-lg">{isUploading ? "AI Đang xử lý..." : "Tạo tự động bằng AI từ File"}</span>
+                <span className="text-sm opacity-70 text-center">Tải lên Ảnh/PDF. AI sẽ bóc tách và tạo câu hỏi tự động.</span>
               </div>
-              <span className="font-bold text-lg">Thêm câu hỏi tự luận</span>
-              <span className="text-sm opacity-70">Nhấn vào đây để thêm nội dung và thiết lập điểm số</span>
-            </button>
+            </div>
           )
         )}
       </div>
 
       {/* Anti-Cheat Security Report Table */}
-      {antiCheatReport && antiCheatReport.length > 0 && (
-        <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
-          <div className="flex items-center justify-between border-b border-white/10 pb-4">
-            <h2 className="text-xl font-bold flex items-center gap-2 text-white">
-              <ShieldAlert className="w-6 h-6 text-amber-400" /> Báo cáo Chống gian lận ({antiCheatReport.length} bài nộp)
-            </h2>
-            <span className="text-xs text-slate-400">Tự động cập nhật thời gian thực</span>
-          </div>
+      {antiCheatReport && antiCheatReport.length > 0 && (() => {
+        const submittedCount = antiCheatReport.filter((r: any) => r.status !== 'IN_PROGRESS' && r.submittedAt).length;
+        const inProgressCount = antiCheatReport.length - submittedCount;
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-slate-400">
-                  <th className="py-3 px-4">Học sinh</th>
-                  <th className="py-3 px-4">Thời gian nộp</th>
-                  <th className="py-3 px-4">Số vi phạm</th>
-                  <th className="py-3 px-4">Mức độ rủi ro</th>
-                  <th className="py-3 px-4">Chi tiết sự kiện</th>
-                  <th className="py-3 px-4 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5 text-sm">
-                {antiCheatReport.map((rep) => (
-                  <tr key={rep.id} className="hover:bg-white/5 transition-colors">
-                    <td className="py-3 px-4 font-semibold text-white">
-                      {rep.student.fullName}
-                      <span className="block text-xs text-slate-400 font-normal">{rep.student.email}</span>
-                    </td>
-                    <td className="py-3 px-4 text-slate-300 text-xs">
-                      {rep.submittedAt ? new Date(rep.submittedAt).toLocaleString('vi-VN') : 'N/A'}
-                    </td>
-                    <td className="py-3 px-4 font-mono font-bold text-white">
-                      {rep.violationCount} lần
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-extrabold inline-flex items-center gap-1 ${
-                        rep.riskLevel === 'HIGH' 
-                          ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
-                          : rep.riskLevel === 'MEDIUM' 
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                          : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                      }`}>
-                        {rep.riskLevel === 'HIGH' && '🔴 Rủi ro Cao'}
-                        {rep.riskLevel === 'MEDIUM' && '🟡 Rủi ro Trung bình'}
-                        {rep.riskLevel === 'LOW' && '🟢 An toàn'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-xs text-slate-400">
-                      {rep.antiCheatLog.length === 0 ? (
-                        <span className="text-slate-500">Không ghi nhận vi phạm</span>
-                      ) : (
-                        <div className="space-y-1">
-                          {rep.antiCheatLog.map((log: any, idx: number) => (
-                            <div key={idx} className="flex items-center gap-1.5">
-                              <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-                              <span>{log.event}: {new Date(log.timestamp).toLocaleTimeString('vi-VN')}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <Link
-                        href={`/teacher/submissions/${rep.id}`}
-                        className="bg-brand-accent/20 hover:bg-brand-accent text-brand-accent hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all inline-block"
-                      >
-                        Chấm & Duyệt 2 cột
-                      </Link>
-                    </td>
+        return (
+          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2 text-white">
+                  <ShieldAlert className="w-6 h-6 text-amber-400" /> Giám sát Phòng thi & Chống gian lận
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Tổng {antiCheatReport.length} thí sinh ({submittedCount} đã nộp bài{inProgressCount > 0 ? `, ${inProgressCount} đang làm bài` : ''})
+                </p>
+              </div>
+              <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                Tự động cập nhật thời gian thực
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-slate-400">
+                    <th className="py-3 px-4">Học sinh</th>
+                    <th className="py-3 px-4">Trạng thái bài thi</th>
+                    <th className="py-3 px-4">Thời gian nộp</th>
+                    <th className="py-3 px-4">Số vi phạm</th>
+                    <th className="py-3 px-4">Mức độ rủi ro</th>
+                    <th className="py-3 px-4">Chi tiết sự kiện</th>
+                    <th className="py-3 px-4 text-right">Thao tác</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-white/5 text-sm">
+                  {antiCheatReport.map((rep: any) => {
+                    const isInProgress = rep.status === 'IN_PROGRESS' || !rep.submittedAt;
+
+                    return (
+                      <tr key={rep.id} className="hover:bg-white/5 transition-colors">
+                        <td className="py-3 px-4 font-semibold text-white">
+                          {rep.student.fullName}
+                          <span className="block text-xs text-slate-400 font-normal">{rep.student.email}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {isInProgress ? (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 inline-flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                              Đang làm bài (Chưa nộp)
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                              Đã nộp bài
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-slate-300 text-xs">
+                          {rep.submittedAt ? (
+                            new Date(rep.submittedAt).toLocaleString('vi-VN')
+                          ) : (
+                            <span className="text-slate-500 italic">Chưa nộp bài</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-white">
+                          {rep.violationCount} lần
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-extrabold inline-flex items-center gap-1 ${
+                            rep.riskLevel === 'HIGH' 
+                              ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
+                              : rep.riskLevel === 'MEDIUM' 
+                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
+                              : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          }`}>
+                            {rep.riskLevel === 'HIGH' && '🔴 Rủi ro Cao'}
+                            {rep.riskLevel === 'MEDIUM' && '🟡 Rủi ro Trung bình'}
+                            {rep.riskLevel === 'LOW' && '🟢 An toàn'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-slate-400">
+                          {rep.antiCheatLog.length === 0 ? (
+                            <span className="text-slate-500">Không ghi nhận vi phạm</span>
+                          ) : (
+                            <div className="space-y-1">
+                              {rep.antiCheatLog.map((log: any, idx: number) => (
+                                <div key={idx} className="flex items-center gap-1.5">
+                                  <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                                  <span>{log.event}: {new Date(log.timestamp).toLocaleTimeString('vi-VN')}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          {isInProgress ? (
+                            <span className="text-xs text-slate-500 italic px-3 py-1.5 inline-block">
+                              Đang làm bài...
+                            </span>
+                          ) : (
+                            <Link
+                              href={`/teacher/submissions/${rep.id}`}
+                              className="bg-brand-accent/20 hover:bg-brand-accent text-brand-accent hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all inline-block shadow-sm"
+                            >
+                              Chấm & Duyệt 2 cột
+                            </Link>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
