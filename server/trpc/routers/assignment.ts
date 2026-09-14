@@ -148,5 +148,90 @@ export const assignmentRouter = router({
       }
 
       return published;
+    }),
+
+  updatePrompt: teacherProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      aiGradingInstruction: z.string().optional(),
+      gradingStyle: z.nativeEnum(GradingStyle).optional()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const assignment = await prisma.assignment.findFirst({
+        where: { id: input.id, class: { teacherId: ctx.session.user.id } }
+      });
+      if (!assignment) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy đề thi hoặc không có quyền.' });
+
+      return await prisma.assignment.update({
+        where: { id: input.id },
+        data: {
+          ...(input.aiGradingInstruction !== undefined ? { aiGradingInstruction: input.aiGradingInstruction } : {}),
+          ...(input.gradingStyle !== undefined ? { gradingStyle: input.gradingStyle } : {})
+        }
+      });
+    }),
+
+  deleteQuestion: teacherProcedure
+    .input(z.object({ questionId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const question = await prisma.question.findUnique({
+        where: { id: input.questionId },
+        include: { assignment: { include: { class: true } } }
+      });
+      if (!question || question.assignment.class.teacherId !== ctx.session.user.id) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy câu hỏi hoặc không có quyền.' });
+      }
+      if (question.assignment.status !== 'DRAFT') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Không thể xóa câu hỏi khi đề thi đã được công bố.' });
+      }
+
+      await prisma.question.delete({ where: { id: input.questionId } });
+      return { success: true };
+    }),
+
+  clearAllQuestions: teacherProcedure
+    .input(z.object({ assignmentId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const assignment = await prisma.assignment.findFirst({
+        where: { id: input.assignmentId, class: { teacherId: ctx.session.user.id } }
+      });
+      if (!assignment) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy đề thi hoặc không có quyền.' });
+      if (assignment.status !== 'DRAFT') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Không thể xóa câu hỏi khi đề thi đã được công bố.' });
+      }
+
+      await prisma.question.deleteMany({ where: { assignmentId: input.assignmentId } });
+      return { success: true };
+    }),
+
+  updateQuestion: teacherProcedure
+    .input(z.object({
+      questionId: z.string().uuid(),
+      content: z.string().min(1, 'Nội dung câu hỏi không được để trống'),
+      maxScore: z.number().positive('Điểm số phải lớn hơn 0'),
+      type: z.nativeEnum(QuestionType).optional(),
+      sampleAnswer: z.string().optional()
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const question = await prisma.question.findUnique({
+        where: { id: input.questionId },
+        include: { assignment: { include: { class: true } } }
+      });
+      if (!question || question.assignment.class.teacherId !== ctx.session.user.id) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy câu hỏi hoặc không có quyền.' });
+      }
+      if (question.assignment.status !== 'DRAFT') {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Không thể chỉnh sửa câu hỏi khi đề thi đã được công bố.' });
+      }
+
+      return await prisma.question.update({
+        where: { id: input.questionId },
+        data: {
+          content: input.content,
+          maxScore: input.maxScore,
+          ...(input.type ? { type: input.type } : {}),
+          ...(input.sampleAnswer !== undefined ? { sampleAnswer: input.sampleAnswer } : {})
+        }
+      });
     })
 });
